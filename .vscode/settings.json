@@ -1,0 +1,6 @@
+{
+    "terminal.integrated.env.linux": {
+        "PATH": "/home/tgallion/.platformio/penv/bin:/home/tgallion/.platformio/penv:/usr/local/cuda-9.0/bin:/home/tgallion/cmake-install/bin:/opt/ros/kinetic/bin:/home/tgallion/ardupilot/Tools/autotest:/opt/gcc-arm-none-eabi-6-2017-q2-update/bin:/home/tgallion/gcc-arm-none-eabi-7-2017-q4-major/bin:/home/tgallion/bin:/home/tgallion/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "PLATFORMIO_CALLER": "vscode"
+    }
+}
