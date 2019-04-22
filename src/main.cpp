@@ -1,11 +1,13 @@
 #include <Arduino.h>
 #include <Chrono.h>
 #include <FastFloatPID.h>
-#include <FlexCAN.h>
+#include <FlexCAN.h>  
 #include <ros.h>
 #include <std_msgs/Float32.h>
 #include <std_msgs/Bool.h>
 #include <math.h>
+#include "QuadDecode_def.h"
+
 #define USE_TEENSY_HW_SERIAL
 #define PID FastFloatPID
 #define throttle A22
@@ -106,7 +108,7 @@ Kellysimsend kellysimsend;
 // -------------------------------------------------------------
 elapsedMicros freq;
 Chrono rosmet;
-Chrono kellymet;
+Chrono controlmet;
 Chrono acommet;
 Chrono dataqmet;
 Chrono rosheartbeat;
@@ -116,6 +118,10 @@ int shbtimeout = 5000;
 // -------------------------------------------------------------
 double Kp = 2, Ki = 0, Kd = 0;
 PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);
+
+QuadDecode<1> menc;
+int32_t lastpos=0;
+int countsrev=64;
 
 // -------------------------------------------------------------
 void setup() {
@@ -130,6 +136,7 @@ void setup() {
 	myPID.SetSampleTime(0.002);
 	// myPID.SetOutputLimits(-993, 993);
 	myPID.SetOutputLimits(-2048, 2048);
+menc.start();
 
 	// -------------------------------------------------------------
 	// Can0.begin(1000000);
@@ -192,19 +199,28 @@ void loop() {
 	// -------------------------------------------------------------
 
 	bool issim = false;
-	if (kellymet.hasPassed(2, true)) {
+	// if (kellymet.hasPassed(2, true)) {
 
-		if (issim) {
-			m_rpm = sim_rpm;
-			cart_speed.data = m_rpm;
-		} else {
+	// 	if (issim) {
+	// 		m_rpm = sim_rpm;
+	// 		cart_speed.data = m_rpm;
+	// 	} else {
 
-			Can0.write(rmsg);
-		}
-		cart_speed.data = t_rpm;
-		myPID.Compute();
-		kellysim();
+	// 		Can0.write(rmsg);
+	// 	}
+	// 	cart_speed.data = t_rpm;
+	// 	myPID.Compute();
+	// 	kellysim();
+	// }
+	if(controlmet.hasPassed(2, true)){
+//m_rpm=(menc.calPosn()-lastpos)/(countsrev)*500*60;
+//latspos=menc.calPosn();
+m_rpm=memc.calPosn()/countsrev*500*60;
+memc.zeroFTM();
+				cart_speed.data = m_rpm;
+				  		  myPID.Compute();
 	}
+
 
 	if (!rosheartbeat.hasPassed(10000) ||
 		!serialheartbeat.hasPassed(shbtimeout) || issim) {
