@@ -16,9 +16,6 @@
 
 void state_set(const std_msgs::Bool &emstate);
 void target_set(const std_msgs::Float32 &v_msg);
-void kellysim();
-void pidDisp();
-void pidMeas();
 
 ros::NodeHandle nh;
 
@@ -27,16 +24,6 @@ float t_rpm = 0;
 float m_rpm = 0;
 float o_set = 0;
 
-// -------------------------------------------------------------
-double sim_rpm = 0;
-const double sim_max_speed = 4000;
-const double sim_accel = 0.5;
-
-// -------------------------------------------------------------
-float disp_set[200] = {0};
-float disp_meas[200] = {0};
-int disp_cycle = 0;
-int disp_subcycle = 0;
 // -------------------------------------------------------------
 
 ros::Publisher
@@ -72,37 +59,7 @@ bool Kellylisten::frameHandler(CAN_message_t &frame, int mailbox,
 
 Kellylisten kellylisten;
 // -------------------------------------------------------------
-static CAN_message_t kmsg;
 
-class Kellysimsend : public CANListener {
-public:
-	void kellyRpmresp(CAN_message_t &frame, int mailbox);
-
-	bool frameHandler(CAN_message_t &frame, int mailbox,
-					uint8_t controller); // overrides the parent version so
-										// we can actually do something
-};
-
-void Kellysimsend::kellyRpmresp(CAN_message_t &frame, int mailbox) {
-	kmsg.id = 0x73;
-	kmsg.len = 3;
-	kmsg.ext = 0;
-	kmsg.buf[0] = (uint16_t(sim_rpm) >> 8);
-	kmsg.buf[1] = uint16_t(sim_rpm) & 0xFF;
-	kmsg.buf[2] = 69;
-
-	Can1.write(kmsg);
-}
-
-bool Kellysimsend::frameHandler(CAN_message_t &frame, int mailbox,
-							uint8_t controller) {
-	//  if(frame.id ==0x6b && frame.buf[0] == 0x37)
-	kellyRpmresp(frame, mailbox);
-
-	return true;
-}
-
-Kellysimsend kellysimsend;
 // -------------------------------------------------------------
 
 // -------------------------------------------------------------
@@ -149,37 +106,35 @@ void setup() {
 	Serial2.begin(115200);
 	Serial2.println("init");
 	// -------------------------------------------------------------
-	Can0.begin(1000000);
-	Can0.attachObj(&kellylisten);
-	Can1.begin(1000000);
-	Can1.attachObj(&kellysimsend);
+// 	Can0.begin(1000000);
+// 	Can0.attachObj(&kellylisten);
 
-	CAN_filter_t allPassFilter;
-	allPassFilter.id = 0;
-	allPassFilter.ext = 0;
-	allPassFilter.rtr = 0;
+// 	CAN_filter_t allPassFilter;
+// 	allPassFilter.id = 0;
+// 	allPassFilter.ext = 0;
+// 	allPassFilter.rtr = 0;
 
-	for (uint8_t filterNum = 0; filterNum < 16; filterNum++) {
-		Can0.setFilter(allPassFilter, filterNum);
-		Can1.setFilter(allPassFilter, filterNum);
-	}
-	for (uint8_t filterNum = 0; filterNum < 16; filterNum++) {
-		kellylisten.attachMBHandler(filterNum);
-		kellysimsend.attachMBHandler(filterNum);
-	}
-	rmsg.ext = 0;
-	rmsg.id = 0x6b;
-	rmsg.len = 1;
-	rmsg.buf[0] = 0x37;
-	rmsg.buf[1] = 0;
-	rmsg.buf[2] = 0;
-	rmsg.buf[3] = 0;
-	rmsg.buf[4] = 0;
-	rmsg.buf[5] = 0;
-	rmsg.buf[6] = 0;
-	rmsg.buf[7] = 0;
+// 	for (uint8_t filterNum = 0; filterNum < 16; filterNum++) {
+// 		Can0.setFilter(allPassFilter, filterNum);
 
-	Can0.write(rmsg);
+// 	}
+// 	for (uint8_t filterNum = 0; filterNum < 16; filterNum++) {
+// 		kellylisten.attachMBHandler(filterNum);
+
+// 	}
+// 	rmsg.ext = 0;
+// 	rmsg.id = 0x6b;
+// 	rmsg.len = 1;
+// 	rmsg.buf[0] = 0x37;
+// 	rmsg.buf[1] = 0;
+// 	rmsg.buf[2] = 0;
+// 	rmsg.buf[3] = 0;
+// 	rmsg.buf[4] = 0;
+// 	rmsg.buf[5] = 0;
+// 	rmsg.buf[6] = 0;
+// 	rmsg.buf[7] = 0;
+
+// 	Can0.write(rmsg);
 
 	// -------------------------------------------------------------
 
@@ -198,14 +153,11 @@ void loop() {
 	
 
 	// -------------------------------------------------------------
-	//pidDisp();
-	if (dataqmet.hasPassed(20, true)) {
-		pidMeas();
-	}
+
 	// -------------------------------------------------------------
 
-	bool issim = false;
-	// if (kellymet.hasPassed(2, true)) {
+
+	// if (kellymet.hasPassed(stime, true)) {
 
 	// 	if (issim) {
 	// 		m_rpm = sim_rpm;
@@ -219,28 +171,27 @@ void loop() {
 	// 	kellysim();
 	// }
 	if(controlmet.hasPassed(stime, true)){
-//m_rpm=(menc.calPosn()-lastpos)/(countsrev)*500*60;
-//latspos=menc.calPosn();
-    filtrpm = filt*filtrpm+(1-filt)*(memc.calPosn()/countsrev*500*60);//low pass filter
-    if(abs(filtrpm)>dband){//dead band
-        filtrpm=0;
-    }
-    m_rpm=filtrpm;// pid input update
+
+        filtrpm = filt*filtrpm+(1-filt)*(memc.calPosn()/countsrev*500*60);//low pass filter
+        if(abs(filtrpm)>dband){//dead band
+           filtrpm=0;
+        }
+        m_rpm=filtrpm;// pid input update
     
-    memc.zeroFTM();// encoder reset
-	cart_speed.data = filtrpm;// ros speed update
-	myPID.Compute();// pid update
+        memc.zeroFTM();// encoder reset
+    	cart_speed.data = filtrpm;// ros speed update
+    	myPID.Compute();// pid update
 	}
 
 
 	if (!rosheartbeat.hasPassed(10000) ||
 		!serialheartbeat.hasPassed(shbtimeout) || issim) {
 		//digitalWrite(LED_BUILTIN,HIGH);
-		int offset = (int) o_set;
-		analogWrite(throttle, offset + 3113);
+		int output = (int) o_set;
+		analogWrite(throttle, output + 2048);
 	} else {
 
-		analogWrite(throttle, 3113);
+		analogWrite(throttle, 2048);
 	}
 	// -------------------------------------------------------------
 	if (acommet.hasPassed(100, true)) {
@@ -304,32 +255,4 @@ void state_set(const std_msgs::Bool &em_state) {
 		digitalWrite(relay_pin, LOW); // relay off for electromagnet
 	}
 }
-void kellysim() {
-	sim_rpm -= (abs(sim_rpm) * sim_rpm) / 100000;
-	sim_rpm += o_set * sim_accel * abs(1 - (abs(sim_rpm) / sim_max_speed));
-}
-void pidMeas() {
-	memmove(&disp_meas[0], &disp_meas[1], 199 * 4);
-	//  memmove(&disp_set[0], &disp_set[1],199*4);
-	disp_meas[199] = m_rpm;
-	disp_set[199] = o_set;
-}
-void pidDisp() {
-	disp_cycle = disp_cycle % 10;
-	if (disp_cycle + disp_subcycle < 1) {
-		analogWriteDAC1(4095);
-	} else if (disp_cycle + disp_subcycle < 2) {
-		analogWriteDAC1(0);
-	} else if (disp_subcycle < 20) {
-		analogWriteDAC1(
-			int(0.666 * disp_meas[disp_subcycle + 20 * disp_cycle]));
-	}
-	// else{
-	//  analogWriteDAC1(int(0.333*disp_set[disp_subcycle-10+10*disp_cycle])+2048);
-	//  }
-	disp_subcycle++;
-	if (disp_subcycle >= 20) {
-		disp_subcycle = 0;
-		disp_cycle++;
-	}
-}
+
