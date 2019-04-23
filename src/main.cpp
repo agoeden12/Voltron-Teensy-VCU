@@ -20,9 +20,8 @@ void target_set(const std_msgs::Float32 &v_msg);
 ros::NodeHandle nh;
 
 std_msgs::Float32 cart_speed;
-float t_rpm = 0;
-float m_rpm = 0;
-float o_set = 0;
+
+
 
 // -------------------------------------------------------------
 
@@ -33,6 +32,7 @@ ros::Subscriber<std_msgs::Float32> sub("/tvelocity", &target_set);
 ros::Subscriber<std_msgs::Bool> sub_em("/rc_in_node/cmd_stop", &state_set);
 
 // -------------------------------------------------------------
+// used for reciving messages from the kelly
 static CAN_message_t rmsg;
 static uint8_t hex[17] = "0123456789abcdef";
 
@@ -46,8 +46,8 @@ public:
 };
 
 void Kellylisten::kellyRpm(CAN_message_t &frame, int mailbox) {
-	m_rpm = uint16_t((frame.buf[0] << 8) + frame.buf[1]); // rpm
-	cart_speed.data = m_rpm;
+	//m_rpm = uint16_t((frame.buf[0] << 8) + frame.buf[1]); // rpm
+//cart_speed.data = m_rpm;
 }
 
 bool Kellylisten::frameHandler(CAN_message_t &frame, int mailbox,
@@ -63,26 +63,29 @@ Kellylisten kellylisten;
 // -------------------------------------------------------------
 
 // -------------------------------------------------------------
-elapsedMicros freq;
-Chrono rosmet;
-Chrono controlmet;
-Chrono acommet;
-Chrono dataqmet;
-Chrono rosheartbeat;
-Chrono serialheartbeat;
+elapsedMicros freq;//used to track totalloop time
+Chrono rosmet;// used to regulate ros update rate
+Chrono controlmet;// used to regulate cotroller loop update rate
+Chrono acommet;// used to regulat serail update rate
+Chrono rosheartbeat;// stops cart if no controller input
+Chrono serialheartbeat; //stops cart if no controller input
 int shbtimeout = 5000;
 
 // -------------------------------------------------------------
-double Kp = 2, Ki = 0, Kd = 0;
-PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);
+int stime=10; // sample time of controll loop and enconder vel
+double Kp = 2, Ki = 0, Kd = 0; // pid vals
+float t_rpm = 0; // variable the PID controller operates on
+float m_rpm = 0;
+float o_set = 0;
+PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);// create pid controller
 
-QuadDecode<1> menc;
+QuadDecode<1> menc;// creates enconder pins 3,4
 
-float countsrev=256.0;
-float filtrpm=0;
-float filt=0.90;
-int stime=10;
-float dband=40;
+float countsrev=256.0;//encoder ticks
+float filtrpm=0; // creates low pass filter for encoder
+float filt=0.90; // filter param
+
+float dband=40; // encoder deadband setting
 
 
 // -------------------------------------------------------------
@@ -98,6 +101,7 @@ void setup() {
 	myPID.SetSampleTime(stime/1000.0);
 	// myPID.SetOutputLimits(-993, 993);
 	myPID.SetOutputLimits(-2048, 2048);
+
 	menc.setup();
     menc.start();
 
@@ -171,7 +175,7 @@ void loop() {
 	// 	kellysim();
 	// }
 	if(controlmet.hasPassed(stime, true)){
-
+        //if the control loop is time to run its runs
         filtrpm = filt*filtrpm+(1-filt)*(memc.calPosn()/countsrev*500*60);//low pass filter
         if(abs(filtrpm)>dband){//dead band
            filtrpm=0;
