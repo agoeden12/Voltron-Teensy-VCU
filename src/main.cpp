@@ -120,8 +120,12 @@ double Kp = 2, Ki = 0, Kd = 0;
 PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);
 
 QuadDecode<1> menc;
-int32_t lastpos=0;
-int countsrev=64;
+
+float countsrev=256.0;
+float filtrpm=0;
+float filt=0.90;
+int stime=10;
+
 
 // -------------------------------------------------------------
 void setup() {
@@ -133,10 +137,11 @@ void setup() {
 
 	analogWriteResolution(12);
 	myPID.SetMode(AUTOMATIC);
-	myPID.SetSampleTime(0.002);
+	myPID.SetSampleTime(stime/1000.0);
 	// myPID.SetOutputLimits(-993, 993);
 	myPID.SetOutputLimits(-2048, 2048);
-menc.start();
+	menc.setup();
+    menc.start();
 
 	// -------------------------------------------------------------
 	// Can0.begin(1000000);
@@ -212,13 +217,15 @@ void loop() {
 	// 	myPID.Compute();
 	// 	kellysim();
 	// }
-	if(controlmet.hasPassed(2, true)){
+	if(controlmet.hasPassed(stime, true)){
 //m_rpm=(menc.calPosn()-lastpos)/(countsrev)*500*60;
 //latspos=menc.calPosn();
-m_rpm=memc.calPosn()/countsrev*500*60;
-memc.zeroFTM();
-				cart_speed.data = m_rpm;
-				  		  myPID.Compute();
+    filtrpm = filt*filtrpm+(1-filt)*memc.calPosn();
+    m_rpm=filtrpm/countsrev*500*60;
+    
+    memc.zeroFTM();
+	cart_speed.data = filtrpm;
+	myPID.Compute();
 	}
 
 
