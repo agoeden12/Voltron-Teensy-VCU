@@ -125,6 +125,7 @@ float countsrev=256.0;
 float filtrpm=0;
 float filt=0.90;
 int stime=10;
+float dband=40;
 
 
 // -------------------------------------------------------------
@@ -220,12 +221,15 @@ void loop() {
 	if(controlmet.hasPassed(stime, true)){
 //m_rpm=(menc.calPosn()-lastpos)/(countsrev)*500*60;
 //latspos=menc.calPosn();
-    filtrpm = filt*filtrpm+(1-filt)*memc.calPosn();
-    m_rpm=filtrpm/countsrev*500*60;
+    filtrpm = filt*filtrpm+(1-filt)*(memc.calPosn()/countsrev*500*60);//low pass filter
+    if(abs(filtrpm)>dband){//dead band
+        filtrpm=0;
+    }
+    m_rpm=filtrpm;// pid input update
     
-    memc.zeroFTM();
-	cart_speed.data = filtrpm;
-	myPID.Compute();
+    memc.zeroFTM();// encoder reset
+	cart_speed.data = filtrpm;// ros speed update
+	myPID.Compute();// pid update
 	}
 
 
