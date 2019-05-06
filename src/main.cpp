@@ -211,7 +211,7 @@ void loop() {
 	if (acommet.hasPassed(100, true)) {
 		Serial2.println(" \f motor rpm " + String(m_rpm*torpm) + " target rpm " +
 						String(t_rpm*torpm) + " motor set " + String(o_set));
-		Serial2.println("Kp: " + String(Kp/torpm) + " Ki: " + String(Ki/torpm) + " Kd: "+String(Kd/torpm) +" Kf: "+String(Kf) );
+		Serial2.println("Kp: " + String(Kp/torpm) + " Ki: " + String(Ki/torpm) + " Kd: "+String(Kd/torpm) +" Kf: "+String(Kf/torpm) );
 		Serial2.println("Filtconst: "+String(filt)+ " Khz " + String(1.0 / (freq / 1000.0))+" tm "+String(shbtimeout));
 		Serial2.println("use letters p, i, d, f, c, m, h  value to set parameters");
 		// Serial2.print("mr,"+String(m_rpm)+'\n');
@@ -248,9 +248,9 @@ void loop() {
 			Serial2.println("Kd set to: " + String(Kd));
 			break;
 		case /* value */ 'f':
-			Kf = Serial2.parseFloat();
+			Kf = Serial2.parseFloat()*torpm;
 			
-			Serial2.println("Kf set to: " + String(Kf));
+			Serial2.println("Kf set to: " + String(Kf/torpm));
 			break;
 	
 		case /* value */ 'c':
