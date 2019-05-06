@@ -64,6 +64,7 @@ Kellylisten kellylisten;
 
 // -------------------------------------------------------------
 elapsedMicros freq;//used to track totalloop time
+elapsedMillis enct;
 Chrono rosmet;// used to regulate ros update rate
 Chrono controlmet;// used to regulate cotroller loop update rate
 Chrono acommet;// used to regulat serail update rate
@@ -73,7 +74,7 @@ int shbtimeout = 5000;
 
 // -------------------------------------------------------------
 int stime=10; // sample time of controll loop and enconder vel
-double Kp = 2, Ki = 0, Kd = 0; // pid vals
+double Kp = 0.3, Ki = 0, Kd = 0, Kf = 0; // pid vals
 float t_rpm = 0; // variable the PID controller operates on
 float m_rpm = 0;
 float o_set = 0;
@@ -81,11 +82,12 @@ PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);// create pid controller
 
 QuadDecode<1> menc;// creates enconder pins 3,4
 
-float countsrev=256.0;//encoder ticks
+float countsrev=1042;//encoder ticks
 float filtrpm=0; // creates low pass filter for encoder
 float filt=0.90; // filter param
+float torpm=100*60/countsrev;
 
-float dband=40; // encoder deadband setting
+float dband=200; // encoder deadband setting
 
 
 // -------------------------------------------------------------
@@ -175,23 +177,31 @@ void loop() {
 	// 	kellysim();
 	// }
 	if(controlmet.hasPassed(stime, true)){
-        //if the control loop is time to run its runs
-        filtrpm = filt*filtrpm+(1-filt)*(memc.calPosn()/countsrev*500*60);//low pass filter
-        if(abs(filtrpm)>dband){//dead band
-           filtrpm=0;
+		int curpos =menc.calcPosn();
+		 if(abs(curpos)<(dband/(torpm))){//dead band
+           filtrpm=filt*filtrpm;
         }
-        m_rpm=filtrpm;// pid input update
-    
-        memc.zeroFTM();// encoder reset
-    	cart_speed.data = filtrpm;// ros speed update
+        else{//if the control loop is time to run its run
+        filtrpm = filt*filtrpm+(1-filt)*(curpos);//low pass filter
+		}
+		//counts per 10ms
+	   //filtrpm = (menc.calcPosn()/(countsrev*enct));
+       
+        m_rpm=(-filtrpm);// pid input update
+		menc.zeroFTM();
+        
+    	cart_speed.data = -filtrpm*torpm;// ros speed update
     	myPID.Compute();// pid update
+	
 	}
 
 
-	if (!rosheartbeat.hasPassed(10000) ||
-		!serialheartbeat.hasPassed(shbtimeout) || issim) {
+	if (!rosheartbeat.hasPassed(1000) ||
+		!serialheartbeat.hasPassed(shbtimeout)) {
 		//digitalWrite(LED_BUILTIN,HIGH);
-		int output = (int) o_set;
+		
+
+		int output = (int) Kf*t_rpm+o_set;
 		analogWrite(throttle, output + 2048);
 	} else {
 
@@ -199,37 +209,59 @@ void loop() {
 	}
 	// -------------------------------------------------------------
 	if (acommet.hasPassed(100, true)) {
-		Serial2.println(" \f motor rpm " + String(m_rpm) + " target rpm " +
-						String(t_rpm) + " motor set " + String(o_set));
-		Serial2.println("Kp: " + String(Kp) + " Ki: " + String(Ki) + " Kd: " +
-						String(Kd) + " Khz " + String(1.0 / (freq / 1000.0)));
-		Serial2.println("use letters p, i, d, m, h  value to set parameters");
+		Serial2.println(" \f motor rpm " + String(m_rpm*torpm) + " target rpm " +
+						String(t_rpm*torpm) + " motor set " + String(o_set));
+		Serial2.println("Kp: " + String(Kp/torpm) + " Ki: " + String(Ki/torpm) + " Kd: "+String(Kd/torpm) +" Kf: "+String(Kf) );
+		Serial2.println("Filtconst: "+String(filt)+ " Khz " + String(1.0 / (freq / 1000.0))+" tm "+String(shbtimeout));
+		Serial2.println("use letters p, i, d, f, c, m, h  value to set parameters");
+		// Serial2.print("mr,"+String(m_rpm)+'\n');
+		// Serial2.print("mt,"+String(t_rpm)+'\n');
+		// Serial2.print("mo,"+String(o_set)+'\n');
+		
+		// Serial2.print("kp,"+String(Kp)+'\n');
+		// Serial2.print("ki,"+String(Ki)+'\n');
+		// Serial2.print("kd,"+String(Kd)+'\n');
+		
+		// Serial2.print("to,"+String(shbtimeout)+'\n');
+		// Serial2.print("hz,"+String(1.0 / (freq / 1000.0))+'\n');
+		// Serial2.flush();
 	}
 	freq = 0;
 	if (Serial2.available() > 1) {
 
 		switch (Serial2.read()) {
 		case /* value */ 'p':
-			Kp = Serial2.parseFloat();
+			Kp = Serial2.parseFloat()*torpm;
 			myPID.SetTunings(Kp, Ki, Kd);
 			Serial2.println("Kp set to: " + String(Kp));
 			break;
 
 		case /* value */ 'i':
-			Ki = Serial2.parseFloat();
+			Ki = Serial2.parseFloat()*torpm;
 			myPID.SetTunings(Kp, Ki, Kd);
 			Serial2.println("Ki set to: " + String(Ki));
 			break;
 
 		case /* value */ 'd':
-			Kd = Serial2.parseFloat();
+			Kd = Serial2.parseFloat()*torpm;
 			myPID.SetTunings(Kp, Ki, Kd);
 			Serial2.println("Kd set to: " + String(Kd));
 			break;
+		case /* value */ 'f':
+			Kf = Serial2.parseFloat();
+			
+			Serial2.println("Kf set to: " + String(Kf));
+			break;
+	
+		case /* value */ 'c':
+			filt = Serial2.parseFloat();
+			
+			Serial2.println("filt set to: " + String(filt));
+			break;	
 		case /* value */ 'm':
-			t_rpm = Serial2.parseInt();
+			t_rpm = Serial2.parseInt()/(torpm);
 			serialheartbeat.restart();
-			Serial2.println("Motor set to: " + String(t_rpm));
+			Serial2.println("Motor set to: " + String(t_rpm*torpm));
 			break;
 		case /* value */ 'h':
 			shbtimeout = Serial2.parseInt();
