@@ -78,6 +78,7 @@ double Kp = 0.3, Ki = 0, Kd = 0, Kf = 0; // pid vals
 float t_rpm = 0; // variable the PID controller operates on
 float m_rpm = 0;
 float o_set = 0;
+float  perc = .1;
 PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);// create pid controller
 
 QuadDecode<1> menc;// creates enconder pins 3,4
@@ -186,10 +187,13 @@ void loop() {
 		}
 		//counts per 10ms
 	   //filtrpm = (menc.calcPosn()/(countsrev*enct));
-       
-        m_rpm=(-filtrpm);// pid input update
+    if(-filtrpm > (t_rpm - perc*t_rpm) && (-filtrpm < t_rpm + perc*t_rpm)){
+			m_rpm = t_rpm;
+	   } 
+	   else{
+        m_rpm=(-filtrpm);
+		}// pid input update
 		menc.zeroFTM();
-        
     	cart_speed.data = -filtrpm*torpm;// ros speed update
     	myPID.Compute();// pid update
 	
@@ -212,7 +216,7 @@ void loop() {
 		Serial2.println(" \f motor rpm " + String(m_rpm*torpm) + " target rpm " +
 						String(t_rpm*torpm) + " motor set " + String(o_set));
 		Serial2.println("Kp: " + String(Kp/torpm) + " Ki: " + String(Ki/torpm) + " Kd: "+String(Kd/torpm) +" Kf: "+String(Kf/torpm) );
-		Serial2.println("Filtconst: "+String(filt)+ " Khz " + String(1.0 / (freq / 1000.0))+" tm "+String(shbtimeout));
+		Serial2.println("Filtconst: "+String(filt)+ " Khz " + String(1.0 / (freq / 1000.0))+" tm "+String(shbtimeout) + "deadband " +  String(perc*100)+"%");
 		Serial2.println("use letters p, i, d, f, c, m, h  value to set parameters");
 		// Serial2.print("mr,"+String(m_rpm)+'\n');
 		// Serial2.print("mt,"+String(t_rpm)+'\n');
@@ -266,7 +270,10 @@ void loop() {
 		case /* value */ 'h':
 			shbtimeout = Serial2.parseInt();
 			Serial2.println("Timeout set to: " + String(shbtimeout));
-
+			break;
+		case  'b':
+			perc = Serial2.parseFloat();
+			Serial2.println("Deband set to  " + String(perc*100) + "%");
 			break;
 		}
 	}
