@@ -89,7 +89,9 @@ float filt=0.90; // filter param
 float torpm=100*60/countsrev;
 
 float dband=200; // encoder deadband setting
-
+bool waszero=true;
+int zerocount=0;
+int zcountlim=5;
 
 // -------------------------------------------------------------
 void setup() {
@@ -177,22 +179,19 @@ void loop() {
 	// 	myPID.Compute();
 	// 	kellysim();
 	// }
-	if(controlmet.hasPassed(stime, true)){
+	if(controlmet.hasPassed(stime, true)){//if the control loop is time to run its run
 		int curpos =menc.calcPosn();
 		 if(abs(curpos)<(dband/(torpm))){//dead band
            filtrpm=filt*filtrpm;
         }
-        else{//if the control loop is time to run its run
+        else{
         filtrpm = filt*filtrpm+(1-filt)*(curpos);//low pass filter
 		}
 		//counts per 10ms
 	   //filtrpm = (menc.calcPosn()/(countsrev*enct));
-    if(-filtrpm > (t_rpm - perc*t_rpm) && (-filtrpm < t_rpm + perc*t_rpm)){
-			m_rpm = t_rpm;
-	   } 
-	   else{
+    
         m_rpm=(-filtrpm);
-		}// pid input update
+	
 		menc.zeroFTM();
     	cart_speed.data = -filtrpm*torpm;// ros speed update
     	myPID.Compute();// pid update
@@ -203,9 +202,19 @@ void loop() {
 	if (!rosheartbeat.hasPassed(1000) ||
 		!serialheartbeat.hasPassed(shbtimeout)) {
 		//digitalWrite(LED_BUILTIN,HIGH);
+		int output=0;
+		if(t_rpm>0){
+		 output = (int) Kf*t_rpm+o_set;
+		}
+		if(output ==0){
+			waszero=true;
+			zerocount=0;
+		}
+		if((waszero||zerocount>0)&&zerocount<zcountlim&&output!=0){
+			output=2048*output/abs(output);
+			zerocount++;
+		}
 		
-
-		int output = (int) Kf*t_rpm+o_set;
 		analogWrite(throttle, output + 2048);
 	} else {
 
@@ -216,7 +225,7 @@ void loop() {
 		Serial2.println(" \f motor rpm " + String(m_rpm*torpm) + " target rpm " +
 						String(t_rpm*torpm) + " motor set " + String(o_set));
 		Serial2.println("Kp: " + String(Kp/torpm) + " Ki: " + String(Ki/torpm) + " Kd: "+String(Kd/torpm) +" Kf: "+String(Kf/torpm) );
-		Serial2.println("Filtconst: "+String(filt)+ " Khz " + String(1.0 / (freq / 1000.0))+" tm "+String(shbtimeout) + "deadband " +  String(perc*100)+"%");
+		Serial2.println("Filtconst: "+String(filt)+ " Khz " + String(1.0 / (freq / 1000.0))+" tm "+String(shbtimeout) + " deadband " +  String(dband));
 		Serial2.println("use letters p, i, d, f, c, m, h  value to set parameters");
 		// Serial2.print("mr,"+String(m_rpm)+'\n');
 		// Serial2.print("mt,"+String(t_rpm)+'\n');
@@ -272,8 +281,12 @@ void loop() {
 			Serial2.println("Timeout set to: " + String(shbtimeout));
 			break;
 		case  'b':
-			perc = Serial2.parseFloat();
-			Serial2.println("Deband set to  " + String(perc*100) + "%");
+			dband = Serial2.parseFloat();
+			Serial2.println("Deband set to  " + String(dband) );
+			break;
+		case 'z':
+			zcountlim = Serial2.parseInt();
+			Serial2.println("ztimer set to: " + String(zcountlim));
 			break;
 		}
 	}
