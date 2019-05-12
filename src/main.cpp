@@ -65,6 +65,7 @@ Kellylisten kellylisten;
 // -------------------------------------------------------------
 elapsedMicros freq;//used to track totalloop time
 elapsedMillis enct;
+Chrono syncmet;// used to regulate outer loop tomes to prevent sync errrors with inner loops
 Chrono rosmet;// used to regulate ros update rate
 Chrono controlmet;// used to regulate cotroller loop update rate
 Chrono acommet;// used to regulat serail update rate
@@ -74,24 +75,29 @@ int shbtimeout = 5000;
 
 // -------------------------------------------------------------
 int stime=10; // sample time of controll loop and enconder vel
-double Kp = 0.3, Ki = 0, Kd = 0, Kf = 0; // pid vals
+double Kp = 4.61, Ki = 0, Kd = 0, Kf = 0.98; // pid vals
 float t_rpm = 0; // variable the PID controller operates on
 float m_rpm = 0;
 float o_set = 0;
-float  perc = .1;
-PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);// create pid controller
 
+PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);// create pid controller
+int output=0;
 QuadDecode<1> menc;// creates enconder pins 3,4
 
 float countsrev=1042;//encoder ticks
 float filtrpm=0; // creates low pass filter for encoder
 float filt=0.90; // filter param
-float torpm=100*60/countsrev;
+float fixitnum=0.83;
+float torpm=100*60/countsrev*fixitnum;
+
+float ofiltval=0; // creates low pass filter for encoder
+float ofilt=0.90; // filter param
+
+
 
 float dband=200; // encoder deadband setting
-bool waszero=true;
-int zerocount=0;
-int zcountlim=5;
+float maxthrottle=2048;
+
 
 // -------------------------------------------------------------
 void setup() {
@@ -156,6 +162,10 @@ void setup() {
 }
 
 void loop() {
+	 while(!syncmet.hasPassed(50,true))
+	 {
+		 
+	 }
 
 	// -------------------------------------------------------------
 	// Serial.print("test");
@@ -202,18 +212,36 @@ void loop() {
 	if (!rosheartbeat.hasPassed(1000) ||
 		!serialheartbeat.hasPassed(shbtimeout)) {
 		//digitalWrite(LED_BUILTIN,HIGH);
-		int output=0;
+		output=0;
+		ofiltval = ofilt*ofiltval+(1-ofilt)*(Kf*t_rpm+o_set);
+		
+		output = (int)ofiltval;
+		if(t_rpm<0){
+			output=output-600;
+		}
 		if(t_rpm>0){
-		 output = (int) Kf*t_rpm+o_set;
+			output = output+600;
 		}
-		if(output ==0){
-			waszero=true;
-			zerocount=0;
+		if(t_rpm=0){
+			if(output<0){
+			output=output-600;
 		}
-		if((waszero||zerocount>0)&&zerocount<zcountlim&&output!=0){
-			output=2048*output/abs(output);
-			zerocount++;
+			if(output>0){
+			output = output+600;
 		}
+
+		}
+		if(abs(output)>maxthrottle){
+
+			if(output<0){
+				output=-maxthrottle;
+			}
+			if(output>0){
+				output = maxthrottle;
+			}
+		}
+
+
 		
 		analogWrite(throttle, output + 2048);
 	} else {
@@ -223,10 +251,14 @@ void loop() {
 	// -------------------------------------------------------------
 	if (acommet.hasPassed(100, true)) {
 		Serial2.println(" \f motor rpm " + String(m_rpm*torpm) + " target rpm " +
-						String(t_rpm*torpm) + " motor set " + String(o_set));
+						String(t_rpm*torpm) + " motor set " + String(o_set+Kf*t_rpm));
 		Serial2.println("Kp: " + String(Kp/torpm) + " Ki: " + String(Ki/torpm) + " Kd: "+String(Kd/torpm) +" Kf: "+String(Kf/torpm) );
 		Serial2.println("Filtconst: "+String(filt)+ " Khz " + String(1.0 / (freq / 1000.0))+" tm "+String(shbtimeout) + " deadband " +  String(dband));
-		Serial2.println("use letters p, i, d, f, c, m, h  value to set parameters");
+		Serial2.println("use letters p, i, d, f, c, m, h  value to set parameters\n");
+				Serial2.println("  motor rpm " + String(m_rpm) + " target rpm " +
+						String(t_rpm) + " motor set " + String(o_set+Kf*t_rpm));
+		Serial2.println("Kp: " + String(Kp) + " Ki: " + String(Ki) + " Kd: "+String(Kd) +" Kf: "+String(Kf) );
+		
 		// Serial2.print("mr,"+String(m_rpm)+'\n');
 		// Serial2.print("mt,"+String(t_rpm)+'\n');
 		// Serial2.print("mo,"+String(o_set)+'\n');
@@ -284,10 +316,14 @@ void loop() {
 			dband = Serial2.parseFloat();
 			Serial2.println("Deband set to  " + String(dband) );
 			break;
-		case 'z':
-			zcountlim = Serial2.parseInt();
-			Serial2.println("ztimer set to: " + String(zcountlim));
+		case 't':
+			maxthrottle= Serial.parseFloat();
+			Serial2.println("Max Throttle set to  " + String(maxthrottle) );
 			break;
+		case 'o':
+			ofilt= Serial.parseFloat();
+			Serial2.println("Max Throttle set to  " + String(ofilt) );
+			break;	
 		}
 	}
 	if (rosmet.hasPassed(20)) {
@@ -298,7 +334,7 @@ void loop() {
 }
 
 void target_set(const std_msgs::Float32 &v_msg) {
-	t_rpm = v_msg.data;
+	t_rpm = v_msg.data/torpm;
 	rosheartbeat.restart();
 	digitalWrite(LED_BUILTIN,HIGH);
 
