@@ -8,6 +8,12 @@
 #include <math.h>
 #include "QuadDecode_def.h"
 
+#include <std_msgs/UInt16MultiArray.h>
+#include <std_msgs/MultiArrayDimension.h>
+#include <std_msgs/MultiArrayLayout.h>
+#include <SatelliteReceiver.h>
+
+
 #define USE_TEENSY_HW_SERIAL
 #define PID FastFloatPID
 #define throttle A22
@@ -20,6 +26,18 @@ void target_set(const std_msgs::Float32 &v_msg);
 ros::NodeHandle nh;
 
 std_msgs::Float32 cart_speed;
+
+
+std_msgs::UInt16MultiArray array_msg;
+std_msgs::MultiArrayDimension myDim;
+std_msgs::MultiArrayLayout myLayout;
+ros::Publisher int16Pub("teensyRX", &array_msg);
+
+#define ledPin 13
+SatelliteReceiver SpektrumRx;
+#define USE_USBCON
+uint16_t update = 0;
+
 
 
 
@@ -152,20 +170,57 @@ void setup() {
 // 	Can0.write(rmsg);
 
 	// -------------------------------------------------------------
-
+	pinMode(ledPin, OUTPUT);
 	// ------------------------------------------------------------
 	nh.getHardware()->setBaud(57600);
 	nh.initNode();
 	nh.advertise(pub_speed);
 	nh.subscribe(sub);
 	nh.subscribe(sub_em);
+
+
+	myDim.label = "channels";
+ 	myDim.size = 7;
+  	myDim.stride = 1;
+  	myLayout.dim = (std_msgs::MultiArrayDimension *)malloc(sizeof(std_msgs::MultiArrayDimension) * 1);
+  	myLayout.dim[0] = myDim;
+ 	 myLayout.data_offset = 0;
+  	array_msg.layout = myLayout;
+ 	 array_msg.data = (uint16_t *)malloc(sizeof(uint16_t) * 7);
+ 	 array_msg.data_length = 7;
+
+ 	 nh.advertise(int16Pub);
+  
+ 	 Serial1.begin(115200);
+ 	 Serial1.setTimeout(1);
+
+
+
 }
 
 void loop() {
-	 while(!syncmet.hasPassed(50,true))
-	 {
-		 
-	 }
+//if(syncmet.hasPassed(5,true)){
+SpektrumRx.getFrame();
+
+  array_msg.data[0] = SpektrumRx.getAile();
+  array_msg.data[1] = SpektrumRx.getElev();
+  array_msg.data[2] = SpektrumRx.getThro();
+  array_msg.data[3] = SpektrumRx.getRudd();
+  array_msg.data[4] = SpektrumRx.getGear();
+  array_msg.data[5] = SpektrumRx.getAux1();
+  array_msg.data[6] = update;
+ 	if (SpektrumRx.getAux1() > 1000)
+  {
+    digitalWrite(ledPin, 1);
+  }
+  else
+  {
+    digitalWrite(ledPin, 0);
+  }
+  
+ 
+
+
 
 	// -------------------------------------------------------------
 	// Serial.print("test");
@@ -222,7 +277,7 @@ void loop() {
 		if(t_rpm>0){
 			output = output+600;
 		}
-		if(t_rpm=0){
+		if(t_rpm==0){
 			if(output<0){
 			output=output-600;
 		}
@@ -258,7 +313,10 @@ void loop() {
 				Serial2.println("  motor rpm " + String(m_rpm) + " target rpm " +
 						String(t_rpm) + " motor set " + String(o_set+Kf*t_rpm));
 		Serial2.println("Kp: " + String(Kp) + " Ki: " + String(Ki) + " Kd: "+String(Kd) +" Kf: "+String(Kf) );
-		
+		for (int i= 0; i<7;i++){
+			Serial2.print(String(array_msg.data[i])+" ");
+		}
+		Serial2.println("");
 		// Serial2.print("mr,"+String(m_rpm)+'\n');
 		// Serial2.print("mt,"+String(t_rpm)+'\n');
 		// Serial2.print("mo,"+String(o_set)+'\n');
@@ -329,8 +387,12 @@ void loop() {
 	if (rosmet.hasPassed(20)) {
 		rosmet.restart();
 		pub_speed.publish(&cart_speed);
-		nh.spinOnce();
+		
+        int16Pub.publish(&array_msg);
+        nh.spinOnce();
+	    update++;
 	}
+//}
 }
 
 void target_set(const std_msgs::Float32 &v_msg) {
