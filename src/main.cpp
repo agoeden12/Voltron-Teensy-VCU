@@ -1,412 +1,66 @@
 #include <Arduino.h>
-#include <Chrono.h>
-#include <FastFloatPID.h>
-#include <FlexCAN.h>  
-#include <ros.h>
-#include <std_msgs/Float32.h>
-#include <std_msgs/Bool.h>
-#include <math.h>
-#include "QuadDecode_def.h"
+#include "ODriveArduino.h"
+#include "SBUS.h"
 
-#include <std_msgs/UInt16MultiArray.h>
-#include <std_msgs/MultiArrayDimension.h>
-#include <std_msgs/MultiArrayLayout.h>
-#include <SatelliteReceiver.h>
+// a SBUS object, which is on hardware
+// serial port 1
+SBUS x8r(Serial2);
 
 
-#define USE_TEENSY_HW_SERIAL
-#define PID FastFloatPID
-#define throttle A22
-#define regen A22
-#define relay_pin 24
+// channel, fail safe, and lost frames data
 
-void state_set(const std_msgs::Bool &emstate);
-void target_set(const std_msgs::Float32 &v_msg);
-
-ros::NodeHandle nh;
-
-std_msgs::Float32 cart_speed;
-
-
-std_msgs::UInt16MultiArray array_msg;
-std_msgs::MultiArrayDimension myDim;
-std_msgs::MultiArrayLayout myLayout;
-ros::Publisher int16Pub("teensyRX", &array_msg);
-
-#define ledPin 13
-SatelliteReceiver SpektrumRx;
-#define USE_USBCON
-uint16_t update = 0;
-
-
-
-
-// -------------------------------------------------------------
-
-ros::Publisher
-pub_speed("Cart_Speed",
-			&cart_speed); // TODO Create custome msg that sends back all data
-ros::Subscriber<std_msgs::Float32> sub("/tvelocity", &target_set);
-ros::Subscriber<std_msgs::Bool> sub_em("/rc_in_node/cmd_stop", &state_set);
-
-// -------------------------------------------------------------
-// used for reciving messages from the kelly
-static CAN_message_t rmsg;
-static uint8_t hex[17] = "0123456789abcdef";
-
-class Kellylisten : public CANListener {
-public:
-	void kellyRpm(CAN_message_t &frame, int mailbox);
-
-	bool frameHandler(CAN_message_t &frame, int mailbox,
-					uint8_t controller); // overrides the parent version so
-										// we can actually do something
-};
-
-void Kellylisten::kellyRpm(CAN_message_t &frame, int mailbox) {
-	//m_rpm = uint16_t((frame.buf[0] << 8) + frame.buf[1]); // rpm
-//cart_speed.data = m_rpm;
-}
-
-bool Kellylisten::frameHandler(CAN_message_t &frame, int mailbox,
-							uint8_t controller) {
-	if (frame.id == 0x73)
-		kellyRpm(frame, mailbox);
-	return true;
-}
-
-Kellylisten kellylisten;
-// -------------------------------------------------------------
-
-// -------------------------------------------------------------
-
-// -------------------------------------------------------------
-elapsedMicros freq;//used to track totalloop time
-elapsedMillis enct;
-Chrono syncmet;// used to regulate outer loop tomes to prevent sync errrors with inner loops
-Chrono rosmet;// used to regulate ros update rate
-Chrono controlmet;// used to regulate cotroller loop update rate
-Chrono acommet;// used to regulat serail update rate
-Chrono rosheartbeat;// stops cart if no controller input
-Chrono serialheartbeat; //stops cart if no controller input
-int shbtimeout = 5000;
-
-// -------------------------------------------------------------
-int stime=10; // sample time of controll loop and enconder vel
-double Kp = 4.61, Ki = 0, Kd = 0, Kf = 0.98; // pid vals
-float t_rpm = 0; // variable the PID controller operates on
-float m_rpm = 0;
-float o_set = 0;
-
-PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);// create pid controller
-int output=0;
-QuadDecode<1> menc;// creates enconder pins 3,4
-
-float countsrev=1042;//encoder ticks
-float filtrpm=0; // creates low pass filter for encoder
-float filt=0.90; // filter param
-float fixitnum=0.83;
-float torpm=100*60/countsrev*fixitnum;
-
-float ofiltval=0; // creates low pass filter for encoder
-float ofilt=0.90; // filter param
-
-
-
-float dband=200; // encoder deadband setting
-float maxthrottle=2048;
-
-
-// -------------------------------------------------------------
+//ODRIVE STUFF
+//on the teensy I am using serial port 3
+//on the odrive I am using axis 0
+int prev=0;
+ODriveArduino odrive(Serial3);
 void setup() {
-	delay(1000);
-	// -------------------------------------------------------------
+  // begin the SBUS communication
+  x8r.begin();
+  Serial.begin(9600);
+  Serial3.begin(115200);
+  //odrive_serial.begin(115200);
 
-	pinMode(relay_pin, OUTPUT);
-	digitalWrite(relay_pin, LOW);
+   
+    int motornum = 0;
+    int requested_state;
 
-	analogWriteResolution(12);
-	myPID.SetMode(AUTOMATIC);
-	myPID.SetSampleTime(stime/1000.0);
-	// myPID.SetOutputLimits(-993, 993);
-	myPID.SetOutputLimits(-2048, 2048);
-
-	menc.setup();
-    menc.start();
-
-	// -------------------------------------------------------------
-	// Can0.begin(1000000);
-	Serial2.begin(115200);
-	Serial2.println("init");
-	// -------------------------------------------------------------
-// 	Can0.begin(1000000);
-// 	Can0.attachObj(&kellylisten);
-
-// 	CAN_filter_t allPassFilter;
-// 	allPassFilter.id = 0;
-// 	allPassFilter.ext = 0;
-// 	allPassFilter.rtr = 0;
-
-// 	for (uint8_t filterNum = 0; filterNum < 16; filterNum++) {
-// 		Can0.setFilter(allPassFilter, filterNum);
-
-// 	}
-// 	for (uint8_t filterNum = 0; filterNum < 16; filterNum++) {
-// 		kellylisten.attachMBHandler(filterNum);
-
-// 	}
-// 	rmsg.ext = 0;
-// 	rmsg.id = 0x6b;
-// 	rmsg.len = 1;
-// 	rmsg.buf[0] = 0x37;
-// 	rmsg.buf[1] = 0;
-// 	rmsg.buf[2] = 0;
-// 	rmsg.buf[3] = 0;
-// 	rmsg.buf[4] = 0;
-// 	rmsg.buf[5] = 0;
-// 	rmsg.buf[6] = 0;
-// 	rmsg.buf[7] = 0;
-
-// 	Can0.write(rmsg);
-
-	// -------------------------------------------------------------
-	pinMode(ledPin, OUTPUT);
-	// ------------------------------------------------------------
-	nh.getHardware()->setBaud(57600);
-	nh.initNode();
-	nh.advertise(pub_speed);
-	nh.subscribe(sub);
-	nh.subscribe(sub_em);
-
-
-	myDim.label = "channels";
- 	myDim.size = 7;
-  	myDim.stride = 1;
-  	myLayout.dim = (std_msgs::MultiArrayDimension *)malloc(sizeof(std_msgs::MultiArrayDimension) * 1);
-  	myLayout.dim[0] = myDim;
- 	 myLayout.data_offset = 0;
-  	array_msg.layout = myLayout;
- 	 array_msg.data = (uint16_t *)malloc(sizeof(uint16_t) * 7);
- 	 array_msg.data_length = 7;
-
- 	 nh.advertise(int16Pub);
-  
- 	 Serial1.begin(115200);
- 	 Serial1.setTimeout(1);
-
-
+  requested_state = ODriveArduino::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
+  odrive.run_state(motornum, requested_state, true);
+  requested_state = ODriveArduino::AXIS_STATE_CLOSED_LOOP_CONTROL;
+  odrive.run_state(motornum, requested_state, false); // don't wait
 
 }
 
 void loop() {
-//if(syncmet.hasPassed(5,true)){
-SpektrumRx.getFrame();
 
-  array_msg.data[0] = SpektrumRx.getAile();
-  array_msg.data[1] = SpektrumRx.getElev();
-  array_msg.data[2] = SpektrumRx.getThro();
-  array_msg.data[3] = SpektrumRx.getRudd();
-  array_msg.data[4] = SpektrumRx.getGear();
-  array_msg.data[5] = SpektrumRx.getAux1();
-  array_msg.data[6] = update;
- 	if (SpektrumRx.getAux1() > 1000)
-  {
-    digitalWrite(ledPin, 1);
+  // look for a good SBUS packet from the receiver
+  /*
+  if(x8r.read(&channels[0], &failSafe, &lostFrame)){
+    //const char *castb = channels[0];
+    // write the SBUS packet to an SBUS compatible servo
+    Serial.println((float)channels[0]);
+    //Serial.println("1");
   }
-  else
-  {
-    digitalWrite(ledPin, 0);
-  }
+  */
+  //Serial.println("test");
   
- 
+  float channels[16]; bool failSafe; bool lostFrame;
+  if(x8r.readCal(&channels[0],&failSafe,&lostFrame)){
+    //Serial.println((float)channels[0]);
+    Serial3.write("r axis0.encoder.pos_estimate\n");
+    Serial.println(odrive.readFloat());
+    int testing=100*channels[0];
 
-
-
-	// -------------------------------------------------------------
-	// Serial.print("test");
-	
-
-	// -------------------------------------------------------------
-
-	// -------------------------------------------------------------
-
-
-	// if (kellymet.hasPassed(stime, true)) {
-
-	// 	if (issim) {
-	// 		m_rpm = sim_rpm;
-	// 		cart_speed.data = m_rpm;
-	// 	} else {
-
-	// 		Can0.write(rmsg);
-	// 	}
-	// 	cart_speed.data = t_rpm;
-	// 	myPID.Compute();
-	// 	kellysim();
-	// }
-	if(controlmet.hasPassed(stime, true)){//if the control loop is time to run its run
-		int curpos =menc.calcPosn();
-		 if(abs(curpos)<(dband/(torpm))){//dead band
-           filtrpm=filt*filtrpm;
-        }
-        else{
-        filtrpm = filt*filtrpm+(1-filt)*(curpos);//low pass filter
-		}
-		//counts per 10ms
-	   //filtrpm = (menc.calcPosn()/(countsrev*enct));
-    
-        m_rpm=(-filtrpm);
-	
-		menc.zeroFTM();
-    	cart_speed.data = -filtrpm*torpm;// ros speed update
-    	myPID.Compute();// pid update
-	
-	}
-
-
-	if (!rosheartbeat.hasPassed(1000) ||
-		!serialheartbeat.hasPassed(shbtimeout)) {
-		//digitalWrite(LED_BUILTIN,HIGH);
-		output=0;
-		ofiltval = ofilt*ofiltval+(1-ofilt)*(Kf*t_rpm+o_set);
-		
-		output = (int)ofiltval;
-		if(t_rpm<0){
-			output=output-600;
-		}
-		if(t_rpm>0){
-			output = output+600;
-		}
-		if(t_rpm==0){
-			if(output<0){
-			output=output-600;
-		}
-			if(output>0){
-			output = output+600;
-		}
-
-		}
-		if(abs(output)>maxthrottle){
-
-			if(output<0){
-				output=-maxthrottle;
-			}
-			if(output>0){
-				output = maxthrottle;
-			}
-		}
-
-
-		
-		analogWrite(throttle, output + 2048);
-	} else {
-
-		analogWrite(throttle, 2048);
-	}
-	// -------------------------------------------------------------
-	if (acommet.hasPassed(100, true)) {
-		Serial2.println(" \f motor rpm " + String(m_rpm*torpm) + " target rpm " +
-						String(t_rpm*torpm) + " motor set " + String(o_set+Kf*t_rpm));
-		Serial2.println("Kp: " + String(Kp/torpm) + " Ki: " + String(Ki/torpm) + " Kd: "+String(Kd/torpm) +" Kf: "+String(Kf/torpm) );
-		Serial2.println("Filtconst: "+String(filt)+ " Khz " + String(1.0 / (freq / 1000.0))+" tm "+String(shbtimeout) + " deadband " +  String(dband));
-		Serial2.println("use letters p, i, d, f, c, m, h  value to set parameters\n");
-				Serial2.println("  motor rpm " + String(m_rpm) + " target rpm " +
-						String(t_rpm) + " motor set " + String(o_set+Kf*t_rpm));
-		Serial2.println("Kp: " + String(Kp) + " Ki: " + String(Ki) + " Kd: "+String(Kd) +" Kf: "+String(Kf) );
-		for (int i= 0; i<7;i++){
-			Serial2.print(String(array_msg.data[i])+" ");
-		}
-		Serial2.println("");
-		// Serial2.print("mr,"+String(m_rpm)+'\n');
-		// Serial2.print("mt,"+String(t_rpm)+'\n');
-		// Serial2.print("mo,"+String(o_set)+'\n');
-		
-		// Serial2.print("kp,"+String(Kp)+'\n');
-		// Serial2.print("ki,"+String(Ki)+'\n');
-		// Serial2.print("kd,"+String(Kd)+'\n');
-		
-		// Serial2.print("to,"+String(shbtimeout)+'\n');
-		// Serial2.print("hz,"+String(1.0 / (freq / 1000.0))+'\n');
-		// Serial2.flush();
-	}
-	freq = 0;
-	if (Serial2.available() > 1) {
-
-		switch (Serial2.read()) {
-		case /* value */ 'p':
-			Kp = Serial2.parseFloat()*torpm;
-			myPID.SetTunings(Kp, Ki, Kd);
-			Serial2.println("Kp set to: " + String(Kp));
-			break;
-
-		case /* value */ 'i':
-			Ki = Serial2.parseFloat()*torpm;
-			myPID.SetTunings(Kp, Ki, Kd);
-			Serial2.println("Ki set to: " + String(Ki));
-			break;
-
-		case /* value */ 'd':
-			Kd = Serial2.parseFloat()*torpm;
-			myPID.SetTunings(Kp, Ki, Kd);
-			Serial2.println("Kd set to: " + String(Kd));
-			break;
-		case /* value */ 'f':
-			Kf = Serial2.parseFloat()*torpm;
-			
-			Serial2.println("Kf set to: " + String(Kf/torpm));
-			break;
-	
-		case /* value */ 'c':
-			filt = Serial2.parseFloat();
-			
-			Serial2.println("filt set to: " + String(filt));
-			break;	
-		case /* value */ 'm':
-			t_rpm = Serial2.parseInt()/(torpm);
-			serialheartbeat.restart();
-			Serial2.println("Motor set to: " + String(t_rpm*torpm));
-			break;
-		case /* value */ 'h':
-			shbtimeout = Serial2.parseInt();
-			Serial2.println("Timeout set to: " + String(shbtimeout));
-			break;
-		case  'b':
-			dband = Serial2.parseFloat();
-			Serial2.println("Deband set to  " + String(dband) );
-			break;
-		case 't':
-			maxthrottle= Serial.parseFloat();
-			Serial2.println("Max Throttle set to  " + String(maxthrottle) );
-			break;
-		case 'o':
-			ofilt= Serial.parseFloat();
-			Serial2.println("Max Throttle set to  " + String(ofilt) );
-			break;	
-		}
-	}
-	if (rosmet.hasPassed(20)) {
-		rosmet.restart();
-		pub_speed.publish(&cart_speed);
-		
-        int16Pub.publish(&array_msg);
-        nh.spinOnce();
-	    update++;
-	}
-//}
+    //check to see if throttle value has changed
+    if(testing!=prev){
+      //if it has, change the position of the odrive
+      prev=testing;
+      odrive.SetPosition(0,testing);
+    }
+    //odrive.SetPosition(0,(int) 100*channels[0])
+    //this is a value from -1 to 1 for the throttle value
+  }
+  //delay(10);
+  //Serial.println(failSafe);
 }
-
-void target_set(const std_msgs::Float32 &v_msg) {
-	t_rpm = v_msg.data/torpm;
-	rosheartbeat.restart();
-	digitalWrite(LED_BUILTIN,HIGH);
-
-}
-
-void state_set(const std_msgs::Bool &em_state) {
-	if (em_state.data) {
-		digitalWrite(relay_pin, HIGH); // relay on for electromagnet
-	} else {
-		digitalWrite(relay_pin, LOW); // relay off for electromagnet
-	}
-}
-
