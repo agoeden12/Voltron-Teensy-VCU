@@ -4,7 +4,8 @@
 
 
 #define throttle A22
-float maxthrottle=2048;
+float maxthrottle=255;
+float controller_deadband=0.01;
 // a SBUS object, which is on hardware
 // serial port 1
 SBUS x8r(Serial2);
@@ -21,7 +22,7 @@ void setup() {
   // begin the SBUS communication
   x8r.begin();
   Serial.begin(9600);
-  //odrive_serial.begin(115200);
+  
 
    
   
@@ -38,17 +39,38 @@ void loop() {
     //Serial.println("1");
   }
   */
-  //Serial.println("test");
+
   
   float channels[16]; bool failSafe; bool lostFrame;
   if(x8r.readCal(&channels[0],&failSafe,&lostFrame)){
+    //output the values of the channels to serial
+    for(int i=0;i<16;i++){
+      Serial.println(channels[i]);
+    }
+    Serial.println(" ");
+    //channel[7] is the self-centering vertical throttle
 
-    Serial.println(channels[0]);
-    int testing=abs(255*channels[0]);
+    if(channels[7]-controller_deadband>0){
+      
 
-    //check to see if throttle value has changed
-    analogWrite(throttle, testing);
+      int testing = maxthrottle*channels[7];
+      Serial.println("throttle value: ");
+      Serial.println(testing);
+      analogWrite(throttle, testing);
+    }
+    else{
+      //if the channel value is not within the deadband and more than zero, set throttle to zero
+      analogWrite(throttle, 0);
+    }
+    
 
+    
+    
+
+  }
+  else{
+    //if there is no input from controller, write zero volt to dac
+    analogWrite(throttle, 0);
   }
 
 }
