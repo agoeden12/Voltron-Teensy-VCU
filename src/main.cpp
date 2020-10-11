@@ -44,10 +44,13 @@ void loop() {
   float channels[16]; bool failSafe; bool lostFrame;
   if(x8r.readCal(&channels[0],&failSafe,&lostFrame)){
     //output the values of the channels to serial
-    for(int i=0;i<16;i++){
-      Serial.println(channels[i]);
-    }
-    Serial.println(" ");
+    
+    
+    //for(int i=0;i<16;i++){
+      //Serial.println(channels[i]);
+    //}
+    //Serial.println(" ");
+    //channel[0] is -1 to 1 left vertical stick position
     //channel[7] is the self-centering vertical throttle
 
     if(channels[7]-controller_deadband>0){
