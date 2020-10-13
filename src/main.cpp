@@ -1,7 +1,11 @@
 #include <Arduino.h>
 #include "ODriveArduino.h"
 #include "SBUS.h"
+#define throttle A22
 
+
+float maxthrottle=4096;
+float controller_deadband=0.01;
 // a SBUS object, which is on hardware
 // serial port 1
 SBUS x8r(Serial2);
@@ -17,6 +21,7 @@ ODriveArduino odrive(Serial3);
 void setup() {
   // begin the SBUS communication
   x8r.begin();
+  analogWriteResolution(12);
   Serial.begin(9600);
   Serial3.begin(115200);
   //odrive_serial.begin(115200);
@@ -48,15 +53,35 @@ void loop() {
   float channels[16]; bool failSafe; bool lostFrame;
   if(x8r.readCal(&channels[0],&failSafe,&lostFrame)){
     //Serial.println((float)channels[0]);
-    Serial3.write("r axis0.encoder.pos_estimate\n");
-    Serial.println(odrive.readFloat());
-    int testing=100*channels[0];
+    
+    
 
-    //check to see if throttle value has changed
-    if(testing!=prev){
+
+    if(channels[7]-controller_deadband>0){
+      
+
+      int controller_throttle = maxthrottle*channels[7];
+      //Serial.println("throttle value: ");
+      //Serial.println(controller_throttle);
+      analogWrite(throttle, (int)controller_throttle);
+    }
+    else{
+      //if the channel value is not within the deadband and more than zero, set throttle to zero
+      analogWrite(throttle, 0);
+    }
+    
+    int controller_steering=int(10*channels[0]);
+    //check to see if steering value has changed
+
+    if(controller_steering!=prev){
       //if it has, change the position of the odrive
-      prev=testing;
-      odrive.SetPosition(0,testing);
+      Serial.println("steering");
+      Serial.println(controller_steering);
+      prev=controller_steering;
+      odrive.SetPosition(0,controller_steering);
+      Serial3.write("r axis0.encoder.pos_estimate\n");
+      Serial.println(odrive.readFloat());
+    
     }
     //odrive.SetPosition(0,(int) 100*channels[0])
     //this is a value from -1 to 1 for the throttle value
