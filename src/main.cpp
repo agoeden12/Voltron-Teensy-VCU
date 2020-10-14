@@ -51,19 +51,30 @@ void loop() {
   //Serial.println("test");
   
   float channels[16]; bool failSafe; bool lostFrame;
+
   if(x8r.readCal(&channels[0],&failSafe,&lostFrame)){
     //Serial.println((float)channels[0]);
-    
+      for(int i=0;i<16;i++){
+        x8r.readCal(&channels[i],&failSafe,&lostFrame);
+        //Serial.println("Channel "+i);
+        Serial.println(channels[i]);
+    } 
+    Serial.println(" ");
     
 
 
     if(channels[7]-controller_deadband>0){
       
-
-      int controller_throttle = maxthrottle*channels[7];
-      //Serial.println("throttle value: ");
-      //Serial.println(controller_throttle);
-      analogWrite(throttle, (int)controller_throttle);
+      if(channels[2]>0){
+        //channel 3 is deadman switch
+        int controller_throttle = maxthrottle*channels[7];
+        Serial.println("throttle value: ");
+        Serial.println(controller_throttle);
+        analogWrite(throttle, (int)controller_throttle);
+      }
+      else{
+        analogWrite(throttle, 0);
+      }
     }
     else{
       //if the channel value is not within the deadband and more than zero, set throttle to zero
