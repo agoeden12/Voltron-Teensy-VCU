@@ -16,7 +16,7 @@ static const int CommandIDLength = 5;
 
 static const float feedforwardFactor = 1 / 0.001;
 
-static const int CANBaudRate = 500000;
+static const int CANBaudRate = 250000;
 
 // Print with stream operator
 template<class T> inline Print& operator <<(Print &obj,     T arg) { obj.print(arg);    return obj; }

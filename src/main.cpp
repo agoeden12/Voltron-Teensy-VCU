@@ -18,11 +18,12 @@ SBUS x8r(Serial2);
 //on the teensy I am using serial port 3
 //on the odrive I am using axis 0
 int prev=0;
+int axis_id = 3;
 ODriveTeensyCAN odrive;
 
 void setup() {
   // begin the SBUS communication
-  //x8r.begin();
+  x8r.begin();
   analogWriteResolution(12);
   Serial.begin(9600);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -30,14 +31,15 @@ void setup() {
   //odrive_serial.begin(115200);
 
    
-  int axis_id = 0;
+  
   int requested_state;
-  odrive.RunState(axis_id,ODriveTeensyCAN::CMD_ID_CANOPEN_NMT_MESSAGE);
-  delay(10);
+  //odrive.RunState(axis_id,ODriveTeensyCAN::CMD_ID_CANOPEN_NMT_MESSAGE);
+  
   requested_state = ODriveTeensyCAN::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
-  odrive.RunState(axis_id, requested_state);
+  //drive.RunState(axis_id, requested_state);
+  //delay(2000);
   requested_state = ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL;
-  odrive.RunState(axis_id, requested_state); 
+  //odrive.RunState(axis_id, requested_state); 
 
 }
 
@@ -95,10 +97,10 @@ void loop() {
       Serial.println("steering");
       Serial.println(controller_steering);
       prev=controller_steering;
-      odrive.SetPosition(0,controller_steering);
+      odrive.SetPosition(axis_id,controller_steering);
       Serial.println("odrive position");
       //Serial3.write("r axis0.encoder.pos_estimate\n");
-      Serial.println(odrive.GetPosition(0));
+      Serial.println(odrive.GetPosition(axis_id));
     
     }
     //odrive.SetPosition(0,(int) 100*channels[0])
