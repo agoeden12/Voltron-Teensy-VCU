@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "ODriveArduino.h"
+#include "ODriveTeensyCAN.h"
 #include "SBUS.h"
 #define throttle A22
 
@@ -17,28 +18,33 @@ SBUS x8r(Serial2);
 //on the teensy I am using serial port 3
 //on the odrive I am using axis 0
 int prev=0;
-ODriveArduino odrive(Serial3);
+ODriveTeensyCAN odrive;
+
 void setup() {
   // begin the SBUS communication
-  x8r.begin();
+  //x8r.begin();
   analogWriteResolution(12);
   Serial.begin(9600);
-  Serial3.begin(115200);
+  pinMode(LED_BUILTIN, OUTPUT);
+  
   //odrive_serial.begin(115200);
 
    
-    int motornum = 0;
-    int requested_state;
-
-  requested_state = ODriveArduino::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
-  odrive.run_state(motornum, requested_state, true);
-  requested_state = ODriveArduino::AXIS_STATE_CLOSED_LOOP_CONTROL;
-  odrive.run_state(motornum, requested_state, false); // don't wait
+  int axis_id = 0;
+  int requested_state;
+  odrive.RunState(axis_id,ODriveTeensyCAN::CMD_ID_CANOPEN_NMT_MESSAGE);
+  delay(10);
+  requested_state = ODriveTeensyCAN::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
+  odrive.RunState(axis_id, requested_state);
+  requested_state = ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL;
+  odrive.RunState(axis_id, requested_state); 
 
 }
 
 void loop() {
+  
 
+  Serial.println(odrive.Heartbeat());
   // look for a good SBUS packet from the receiver
   /*
   if(x8r.read(&channels[0], &failSafe, &lostFrame)){
@@ -90,8 +96,9 @@ void loop() {
       Serial.println(controller_steering);
       prev=controller_steering;
       odrive.SetPosition(0,controller_steering);
-      Serial3.write("r axis0.encoder.pos_estimate\n");
-      Serial.println(odrive.readFloat());
+      Serial.println("odrive position");
+      //Serial3.write("r axis0.encoder.pos_estimate\n");
+      Serial.println(odrive.GetPosition(0));
     
     }
     //odrive.SetPosition(0,(int) 100*channels[0])
