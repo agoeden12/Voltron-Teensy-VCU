@@ -17,13 +17,14 @@ SBUS x8r(Serial2);
 //on the teensy I am using serial port 3
 //on the odrive I am using axis 0
 int prev=0;
-
+int relay_in = 23;
 void setup() {
   // begin the SBUS communication
+
   x8r.begin();
   Serial.begin(9600);
-  
-
+  pinMode(relay_in, OUTPUT);
+  digitalWrite(relay_in, HIGH);
    
   
 }
@@ -64,6 +65,12 @@ void loop() {
     else{
       //if the channel value is not within the deadband and more than zero, set throttle to zero
       analogWrite(throttle, 0);
+    }
+    if(channels[2]>0){
+      digitalWrite(relay_in, LOW);
+    }
+    else{
+      digitalWrite(relay_in, HIGH);
     }
     
 

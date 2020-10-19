@@ -8,7 +8,7 @@
             "includePath": [
                 "/home/benhall/dev/teensy-voltron/include",
                 "/home/benhall/dev/teensy-voltron/src",
-                "/home/benhall/dev/teensy-voltron/.pio/libdeps/teensy36/ODriveArduino",
+                "/home/benhall/dev/teensy-voltron/.pio/libdeps/teensy35/ODriveArduino",
                 "/home/benhall/.platformio/packages/framework-arduinoteensy/cores/teensy3",
                 "/home/benhall/.platformio/lib/Firmata",
                 "/home/benhall/.platformio/lib/Firmata/utility",
@@ -121,7 +121,7 @@
                 "path": [
                     "/home/benhall/dev/teensy-voltron/include",
                     "/home/benhall/dev/teensy-voltron/src",
-                    "/home/benhall/dev/teensy-voltron/.pio/libdeps/teensy36/ODriveArduino",
+                    "/home/benhall/dev/teensy-voltron/.pio/libdeps/teensy35/ODriveArduino",
                     "/home/benhall/.platformio/packages/framework-arduinoteensy/cores/teensy3",
                     "/home/benhall/.platformio/lib/Firmata",
                     "/home/benhall/.platformio/lib/Firmata/utility",
@@ -232,13 +232,13 @@
             },
             "defines": [
                 "PLATFORMIO=50001",
-                "__MK66FX1M0__",
-                "ARDUINO_TEENSY36",
+                "__MK64FX512__",
+                "ARDUINO_TEENSY35",
                 "USB_SERIAL",
                 "ARDUINO=10805",
                 "TEENSYDUINO=153",
                 "CORE_TEENSY",
-                "F_CPU=180000000L",
+                "F_CPU=120000000L",
                 "LAYOUT_US_ENGLISH",
                 ""
             ],
