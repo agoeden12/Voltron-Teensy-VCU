@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "ODriveArduino.h"
+
 #include "SBUS.h"
 #define throttle A22
 
@@ -17,24 +17,17 @@ SBUS x8r(Serial2);
 //on the teensy I am using serial port 3
 //on the odrive I am using axis 0
 int prev=0;
-ODriveArduino odrive(Serial3);
+int relay_in = 23;
 void setup() {
   // begin the SBUS communication
+
   x8r.begin();
   analogWriteResolution(12);
   Serial.begin(9600);
-  Serial3.begin(115200);
-  //odrive_serial.begin(115200);
-
+  pinMode(relay_in, OUTPUT);
+  digitalWrite(relay_in, HIGH);
    
-    int motornum = 0;
-    int requested_state;
-
-  requested_state = ODriveArduino::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
-  odrive.run_state(motornum, requested_state, true);
-  requested_state = ODriveArduino::AXIS_STATE_CLOSED_LOOP_CONTROL;
-  odrive.run_state(motornum, requested_state, false); // don't wait
-
+  
 }
 
 void loop() {
@@ -48,7 +41,7 @@ void loop() {
     //Serial.println("1");
   }
   */
-  //Serial.println("test");
+
   
   float channels[16]; bool failSafe; bool lostFrame;
 
@@ -94,9 +87,15 @@ void loop() {
       Serial.println(odrive.readFloat());
     
     }
-    //odrive.SetPosition(0,(int) 100*channels[0])
-    //this is a value from -1 to 1 for the throttle value
+    
+
+    
+    
+
   }
-  //delay(10);
-  //Serial.println(failSafe);
+  else{
+    //if there is no input from controller, write zero volt to dac
+    analogWrite(throttle, 0);
+  }
+
 }
