@@ -10,7 +10,7 @@ float controller_deadband=0.01;
 // a SBUS object, which is on hardware
 // serial port 1
 SBUS x8r(Serial2);
-
+int relay_in = 23;
 
 // channel, fail safe, and lost frames data
 
@@ -28,15 +28,17 @@ bool armed=false;
 
 void setup() {
   // begin the SBUS communication
+
   x8r.begin();
   analogWriteResolution(12);
   Serial.begin(9600);
-  pinMode(LED_BUILTIN, OUTPUT);
-  
-  //odrive_serial.begin(115200);
+  Serial3.begin(115200);
+  pinMode(relay_in, OUTPUT);
+  digitalWrite(relay_in, HIGH);
 
-   
-  
+
+    int motornum = 0;
+    int requested_state;
 
 
 }
@@ -75,7 +77,7 @@ void loop() {
     //Serial.println("1");
   }
   */
-  //Serial.println("test");
+
   
   float channels[16]; bool failSafe; bool lostFrame;
 
@@ -127,10 +129,15 @@ void loop() {
       Serial.println(odrive.GetPosition(axis_id));
     
     }
-    //odrive.SetPosition(0,(int) 100*channels[0])
-    //this is a value from -1 to 1 for the throttle value
-  }
-  //delay(10);
-  //Serial.println(failSafe);
-}
+    
 
+    
+    
+
+  }
+  else{
+    //if there is no input from controller, write zero volt to dac
+    analogWrite(throttle, 0);
+  }
+
+}
