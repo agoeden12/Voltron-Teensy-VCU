@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include "ODriveArduino.h"
 #include "ODriveTeensyCAN.h"
 #include "SBUS.h"
 #define throttle A22
@@ -37,8 +36,8 @@ void setup() {
   digitalWrite(relay_in, HIGH);
 
 
-    int motornum = 0;
-    int requested_state;
+  
+
 
 
 }
@@ -66,17 +65,10 @@ void armOdrive() {
 
 void loop() {
   
+  
 
   //Serial.println(odrive.Heartbeat());
-  // look for a good SBUS packet from the receiver
-  /*
-  if(x8r.read(&channels[0], &failSafe, &lostFrame)){
-    //const char *castb = channels[0];
-    // write the SBUS packet to an SBUS compatible servo
-    Serial.println((float)channels[0]);
-    //Serial.println("1");
-  }
-  */
+
 
   
   float channels[16]; bool failSafe; bool lostFrame;
@@ -87,9 +79,16 @@ void loop() {
         x8r.readCal(&channels[i],&failSafe,&lostFrame);
         //Serial.println("Channel "+i);
         Serial.println(channels[i]);
-    } 
+    }
+    if(channels[2]>0){
+      digitalWrite(relay_in, LOW);
+    }
+    else{
+      digitalWrite(relay_in, HIGH);
+    }
+ 
 
-    
+    //odrive arming with SF toggle switch on controller
     Serial.println("odrive armed: ");
     Serial.println(armed);
     Serial.println(" ");
@@ -97,6 +96,9 @@ void loop() {
     if(channels[3]>0&&!armed){
       armOdrive();
     }
+
+
+
     if(channels[7]-controller_deadband>0){
       
       if(channels[2]>0){
@@ -125,7 +127,7 @@ void loop() {
       prev=controller_steering;
       odrive.SetPosition(axis_id,controller_steering);
       Serial.println("odrive position");
-      //Serial3.write("r axis0.encoder.pos_estimate\n");
+      
       Serial.println(odrive.GetPosition(axis_id));
     
     }
