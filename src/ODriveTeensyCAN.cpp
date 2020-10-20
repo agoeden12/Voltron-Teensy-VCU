@@ -54,6 +54,7 @@ void ODriveTeensyCAN::sendMessage(int axis_id, int cmd_id, bool remote_transmiss
 
 int ODriveTeensyCAN::Heartbeat() {
     CAN_message_t return_msg;
+    Serial.println(Can0.read(return_msg));
 	if(Can0.read(return_msg) == 1) {
 		return (int)(return_msg.id >> 5);
 	} else {

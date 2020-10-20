@@ -19,7 +19,12 @@ SBUS x8r(Serial2);
 //on the odrive I am using axis 0
 int prev=0;
 int axis_id = 3;
+
+
 ODriveTeensyCAN odrive;
+
+
+bool armed=false;
 
 void setup() {
   // begin the SBUS communication
@@ -32,21 +37,35 @@ void setup() {
 
    
   
+
+
+}
+
+void armOdrive() {
+
   int requested_state;
   //odrive.RunState(axis_id,ODriveTeensyCAN::CMD_ID_CANOPEN_NMT_MESSAGE);
-  
+  delay(1000);
+  Serial.print("testing");
+  Serial.print(odrive.GetPosition(axis_id));
+  delay(200);
   requested_state = ODriveTeensyCAN::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
-  //drive.RunState(axis_id, requested_state);
-  //delay(2000);
+  odrive.RunState(axis_id, requested_state);
+  delay(200);
+  while(odrive.GetCurrentState(axis_id)!=ODriveTeensyCAN::AXIS_STATE_IDLE){
+    delay(500);
+    Serial.println("waiting...");
+  }
+  Serial.println("got out");
   requested_state = ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL;
-  //odrive.RunState(axis_id, requested_state); 
-
+  odrive.RunState(axis_id, requested_state);
+  armed=true; 
 }
 
 void loop() {
   
 
-  Serial.println(odrive.Heartbeat());
+  //Serial.println(odrive.Heartbeat());
   // look for a good SBUS packet from the receiver
   /*
   if(x8r.read(&channels[0], &failSafe, &lostFrame)){
@@ -67,10 +86,15 @@ void loop() {
         //Serial.println("Channel "+i);
         Serial.println(channels[i]);
     } 
-    Serial.println(" ");
+
     
+    Serial.println("odrive armed: ");
+    Serial.println(armed);
+    Serial.println(" ");
 
-
+    if(channels[3]>0&&!armed){
+      armOdrive();
+    }
     if(channels[7]-controller_deadband>0){
       
       if(channels[2]>0){
@@ -92,7 +116,7 @@ void loop() {
     int controller_steering=int(10*channels[0]);
     //check to see if steering value has changed
 
-    if(controller_steering!=prev){
+    if(controller_steering!=prev && armed){
       //if it has, change the position of the odrive
       Serial.println("steering");
       Serial.println(controller_steering);
@@ -109,3 +133,4 @@ void loop() {
   //delay(10);
   //Serial.println(failSafe);
 }
+
