@@ -9,7 +9,7 @@ float controller_deadband=0.01;
 // a SBUS object, which is on hardware
 // serial port 1
 SBUS x8r(Serial2);
-
+int relay_in = 23;
 
 // channel, fail safe, and lost frames data
 
@@ -24,9 +24,10 @@ void setup() {
   analogWriteResolution(12);
   Serial.begin(9600);
   Serial3.begin(115200);
-  //odrive_serial.begin(115200);
+  pinMode(relay_in, OUTPUT);
+  digitalWrite(relay_in, HIGH);
 
-   
+
     int motornum = 0;
     int requested_state;
 
@@ -83,6 +84,13 @@ void loop() {
     
     int controller_steering=int(10*channels[0]);
     //check to see if steering value has changed
+
+    if(channels[2]>0){
+      digitalWrite(relay_in, LOW);
+    }
+    else{
+      digitalWrite(relay_in, HIGH);
+
 
     if(controller_steering!=prev){
       //if it has, change the position of the odrive
