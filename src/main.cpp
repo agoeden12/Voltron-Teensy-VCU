@@ -1,10 +1,10 @@
 #include <Arduino.h>
 
 #include "SBUS.h"
-
-
 #define throttle A22
-float maxthrottle=255;
+
+
+float maxthrottle=4096;
 float controller_deadband=0.01;
 // a SBUS object, which is on hardware
 // serial port 1
@@ -22,6 +22,7 @@ void setup() {
   // begin the SBUS communication
 
   x8r.begin();
+  analogWriteResolution(12);
   Serial.begin(9600);
   pinMode(relay_in, OUTPUT);
   digitalWrite(relay_in, HIGH);
@@ -43,34 +44,48 @@ void loop() {
 
   
   float channels[16]; bool failSafe; bool lostFrame;
+
   if(x8r.readCal(&channels[0],&failSafe,&lostFrame)){
-    //output the values of the channels to serial
+    //Serial.println((float)channels[0]);
+      for(int i=0;i<16;i++){
+        x8r.readCal(&channels[i],&failSafe,&lostFrame);
+        //Serial.println("Channel "+i);
+        Serial.println(channels[i]);
+    } 
+    Serial.println(" ");
     
-    
-    //for(int i=0;i<16;i++){
-      //Serial.println(channels[i]);
-    //}
-    //Serial.println(" ");
-    //channel[0] is -1 to 1 left vertical stick position
-    //channel[7] is the self-centering vertical throttle
+
 
     if(channels[7]-controller_deadband>0){
       
-
-      int testing = maxthrottle*channels[7];
-      Serial.println("throttle value: ");
-      Serial.println(testing);
-      analogWrite(throttle, testing);
+      if(channels[2]>0){
+        //channel 3 is deadman switch
+        int controller_throttle = maxthrottle*channels[7];
+        Serial.println("throttle value: ");
+        Serial.println(controller_throttle);
+        analogWrite(throttle, (int)controller_throttle);
+      }
+      else{
+        analogWrite(throttle, 0);
+      }
     }
     else{
       //if the channel value is not within the deadband and more than zero, set throttle to zero
       analogWrite(throttle, 0);
     }
-    if(channels[2]>0){
-      digitalWrite(relay_in, LOW);
-    }
-    else{
-      digitalWrite(relay_in, HIGH);
+    
+    int controller_steering=int(10*channels[0]);
+    //check to see if steering value has changed
+
+    if(controller_steering!=prev){
+      //if it has, change the position of the odrive
+      Serial.println("steering");
+      Serial.println(controller_steering);
+      prev=controller_steering;
+      odrive.SetPosition(0,controller_steering);
+      Serial3.write("r axis0.encoder.pos_estimate\n");
+      Serial.println(odrive.readFloat());
+    
     }
     
 
