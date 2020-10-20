@@ -102,7 +102,7 @@ void loop() {
     if(channels[7]-controller_deadband>0){
       
       if(channels[2]>0){
-        //channel 3 is deadman switch
+        //channel 3 is deadman switchxz
         int controller_throttle = maxthrottle*channels[7];
         Serial.println("throttle value: ");
         Serial.println(controller_throttle);
