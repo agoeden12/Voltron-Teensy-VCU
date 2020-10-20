@@ -116,7 +116,7 @@ void loop() {
     int controller_steering=int(10*channels[0]);
     //check to see if steering value has changed
 
-    if(controller_steering!=prev && armed){
+    if(controller_steering!=prev && armed&&(abs(channels[0])<=1)){
       //if it has, change the position of the odrive
       Serial.println("steering");
       Serial.println(controller_steering);
