@@ -137,9 +137,6 @@ void loop() {
     
 
   }
-  else{
-    //if there is no input from controller, write zero volt to dac
-    analogWrite(throttle, 0);
-  }
+
 
 }
