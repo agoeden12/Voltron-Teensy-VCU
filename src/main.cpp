@@ -4,6 +4,8 @@
 #define throttle A22
 
 
+
+
 float maxthrottle=4096;
 float controller_deadband=0.01;
 // a SBUS object, which is on hardware
@@ -19,28 +21,14 @@ int relay_in = 23;
 int prev=0;
 int axis_id = 3;
 
+// if this becomes true, kill system.
+bool emergency = false;
+String emergencyMsg = ""; 
 
 ODriveTeensyCAN odrive;
 
 
 bool armed=false;
-
-void setup() {
-  // begin the SBUS communication
-
-  x8r.begin();
-  analogWriteResolution(12);
-  Serial.begin(9600);
-  Serial3.begin(115200);
-  pinMode(relay_in, OUTPUT);
-  digitalWrite(relay_in, HIGH);
-
-
-  
-
-
-
-}
 
 void armOdrive() {
 
@@ -63,14 +51,32 @@ void armOdrive() {
   armed=true; 
 }
 
+void killSystem() {
+  while(emergency) {
+    Serial.println("Emergency tripped: " + emergencyMsg);
+    delay(500);
+  }
+}
+
+void setup() {
+  // begin the SBUS communication
+
+  x8r.begin();
+  analogWriteResolution(12);
+  Serial.begin(9600);
+  Serial3.begin(115200);
+  pinMode(relay_in, OUTPUT);
+  digitalWrite(relay_in, HIGH);
+
+}
+
 void loop() {
-  
-  
-
   //Serial.println(odrive.Heartbeat());
+  if (emergency)
+  {
+    killSystem();
+  }
 
-
-  
   float channels[16]; bool failSafe; bool lostFrame;
 
   if(x8r.readCal(&channels[0],&failSafe,&lostFrame)){
@@ -98,7 +104,7 @@ void loop() {
     }
 
 
-
+    // deadman controls
     if(channels[7]-controller_deadband>0){
       
       if(channels[2]>0){
@@ -110,6 +116,11 @@ void loop() {
       }
       else{
         analogWrite(throttle, 0);
+        
+        //go into emergency
+        emergency = true;
+        emergencyMsg.append("Dead man switch fault");
+        return;
       }
     }
     else{
@@ -138,5 +149,11 @@ void loop() {
 
   }
 
+  // state checks
 
+  if (odrive.Heartbeat() == -1) {
+    emergency = true;
+    emergencyMsg.append("Odrive Heartbeat: " + odrive.Heartbeat());
+    return;
+  }
 }
