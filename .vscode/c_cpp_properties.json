@@ -231,7 +231,7 @@
                 ]
             },
             "defines": [
-                "PLATFORMIO=50001",
+                "PLATFORMIO=50002",
                 "__MK64FX512__",
                 "ARDUINO_TEENSY35",
                 "USB_SERIAL",
