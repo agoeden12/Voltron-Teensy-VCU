@@ -106,6 +106,7 @@ void loop() {
 
     // deadman controls
     if(channels[7]-controller_deadband>0){
+      odrive.SetTorque(1, 0);
       
       if(channels[2]>0){
         //channel 3 is deadman switchxz
@@ -123,9 +124,14 @@ void loop() {
         return;
       }
     }
-    else{
+    else{ // brake
       //if the channel value is not within the deadband and more than zero, set throttle to zero
       analogWrite(throttle, 0);
+
+      int controller_throttle = maxthrottle*channels[7] * -1;
+      Serial.println("throttle value: ");
+      Serial.println(controller_throttle);
+      odrive.SetTorque(1, controller_throttle);
     }
     
     int controller_steering=int(10*channels[0]);
