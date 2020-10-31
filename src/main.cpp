@@ -130,7 +130,7 @@ void loop() {
         
         //go into emergency
         emergency = true;
-        emergencyMsg.append("Dead man switch fault");
+        emergencyMsg =  "Dead man switch fault";
         return;
       }
     }
@@ -170,7 +170,7 @@ void loop() {
 
   if (odrive.Heartbeat() == -1) {
     emergency = true;
-    emergencyMsg.append("Odrive Heartbeat: " + odrive.Heartbeat());
+    emergencyMsg = "Odrive Heartbeat: " + odrive.Heartbeat();
     return;
   }
 }
