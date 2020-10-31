@@ -7,6 +7,9 @@
 
 
 float maxthrottle=4096;
+//max_brake in newton-meters
+float max_brake = 0.6; 
+
 float controller_deadband=0.01;
 // a SBUS object, which is on hardware
 // serial port 1
@@ -19,7 +22,10 @@ int relay_in = 23;
 //on the teensy I am using serial port 3
 //on the odrive I am using axis 0
 int prev=0;
-int axis_id = 3;
+//axis0 (steering is node id 3)
+//axis2 (steering is node id 5)
+int axis_steering = 3;
+int axis_braking=5;
 
 // if this becomes true, kill system.
 bool emergency = false;
@@ -33,21 +39,25 @@ bool armed=false;
 void armOdrive() {
 
   int requested_state;
-  //odrive.RunState(axis_id,ODriveTeensyCAN::CMD_ID_CANOPEN_NMT_MESSAGE);
+  //odrive.RunState(axis_steering,ODriveTeensyCAN::CMD_ID_CANOPEN_NMT_MESSAGE);
   delay(1000);
   Serial.print("testing");
-  Serial.print(odrive.GetPosition(axis_id));
+  Serial.print(odrive.GetPosition(axis_steering));
   delay(200);
   requested_state = ODriveTeensyCAN::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
-  odrive.RunState(axis_id, requested_state);
+  odrive.RunState(axis_steering, requested_state);
+  requested_state = ODriveTeensyCAN::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
+  odrive.RunState(axis_braking, requested_state);
   delay(200);
-  while(odrive.GetCurrentState(axis_id)!=ODriveTeensyCAN::AXIS_STATE_IDLE){
+  while(odrive.GetCurrentState(axis_steering)!=ODriveTeensyCAN::AXIS_STATE_IDLE && (axis_braking)!=ODriveTeensyCAN::AXIS_STATE_IDLE){
     delay(500);
     Serial.println("waiting...");
   }
   Serial.println("got out");
   requested_state = ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL;
-  odrive.RunState(axis_id, requested_state);
+  odrive.RunState(axis_steering, requested_state);
+  odrive.RunState(axis_braking, requested_state);
+
   armed=true; 
 }
 
@@ -86,7 +96,7 @@ void loop() {
         //Serial.println("Channel "+i);
         Serial.println(channels[i]);
     }
-    if(channels[2]>0){
+    if(channels[4]>0){
       digitalWrite(relay_in, LOW);
     }
     else{
@@ -99,18 +109,18 @@ void loop() {
     Serial.println(armed);
     Serial.println(" ");
 
-    if(channels[3]>0&&!armed){
+    if(channels[5]>0&&!armed){
       armOdrive();
     }
 
 
     // deadman controls
-    if(channels[7]-controller_deadband>0){
+    if(channels[0]-controller_deadband>0){
       odrive.SetTorque(1, 0);
       
-      if(channels[2]>0){
+      if(channels[4]>0){
         //channel 3 is deadman switchxz
-        int controller_throttle = maxthrottle*channels[7];
+        int controller_throttle = maxthrottle*channels[0];
         Serial.println("throttle value: ");
         Serial.println(controller_throttle);
         analogWrite(throttle, (int)controller_throttle);
@@ -128,24 +138,25 @@ void loop() {
       //if the channel value is not within the deadband and more than zero, set throttle to zero
       analogWrite(throttle, 0);
 
-      int controller_throttle = maxthrottle*channels[7] * -1;
-      Serial.println("throttle value: ");
-      Serial.println(controller_throttle);
-      odrive.SetTorque(1, controller_throttle);
+      int controller_braking = max_brake*channels[0];
+
+      Serial.println("braking value: ");
+      Serial.println(controller_braking);
+      odrive.SetTorque(axis_braking, controller_braking);
     }
     
-    int controller_steering=int(10*channels[0]);
+    int controller_steering=int(10*channels[1]);
     //check to see if steering value has changed
 
-    if(controller_steering!=prev && armed&&(abs(channels[0])<=1)){
+    if(controller_steering!=prev && armed&&(abs(channels[1])<=1)){
       //if it has, change the position of the odrive
       Serial.println("steering");
       Serial.println(controller_steering);
       prev=controller_steering;
-      odrive.SetPosition(axis_id,controller_steering);
+      odrive.SetPosition(axis_steering,controller_steering);
       Serial.println("odrive position");
       
-      Serial.println(odrive.GetPosition(axis_id));
+      Serial.println(odrive.GetPosition(axis_steering));
     
     }
     
