@@ -14,7 +14,8 @@ public:
         AXIS_STATE_SENSORLESS_CONTROL = 5,  //<! run sensorless control
         AXIS_STATE_ENCODER_INDEX_SEARCH = 6, //<! run encoder index search
         AXIS_STATE_ENCODER_OFFSET_CALIBRATION = 7, //<! run encoder offset calibration
-        AXIS_STATE_CLOSED_LOOP_CONTROL = 8  //<! run closed loop control
+        AXIS_STATE_CLOSED_LOOP_CONTROL = 8,  //<! run closed loop control
+        AXIS_STATE_HOMING = 11 //<! run axis homing function
     };
 
     enum CommandId_t {

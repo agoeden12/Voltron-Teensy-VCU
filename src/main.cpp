@@ -1,20 +1,27 @@
 #include <Arduino.h>
 #include "ODriveTeensyCAN.h"
 #include "SBUS.h"
+
 #define throttle A22
 
 
+//debounce stuff for reset button
+long debouncing_time = 30; //Debouncing Time in Milliseconds
+volatile unsigned long last_micros;
 
-
+bool reset_state;
 float maxthrottle=4096;
 //max_brake in newton-meters
 float max_brake = 0.6; 
 
 float controller_deadband=0.01;
 // a SBUS object, which is on hardware
-// serial port 1
+// serial port 2
 SBUS x8r(Serial2);
-int relay_in = 23;
+
+bool armed_controller=false;
+int emergency_relay = 23;
+int reset_switch = 33;
 
 // channel, fail safe, and lost frames data
 
@@ -23,13 +30,12 @@ int relay_in = 23;
 //on the odrive I am using axis 0
 int prev=0;
 //axis0 (steering is node id 3)
-//axis2 (steering is node id 5)
+//axis1    (steering is node id 5)
 int axis_steering = 3;
 int axis_braking=5;
 
 // if this becomes true, kill system.
 bool emergency = false;
-String emergencyMsg = ""; 
 
 ODriveTeensyCAN odrive;
 
@@ -54,38 +60,57 @@ void armOdrive() {
     Serial.println("waiting...");
   }
   Serial.println("got out");
+
+
+
   requested_state = ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL;
   odrive.RunState(axis_steering, requested_state);
+  delay(200);
   odrive.RunState(axis_braking, requested_state);
-
-  armed=true; 
+  delay(200);
+  armed_controller=true; 
+  armed=true;
 }
 
-void killSystem() {
+void killSystem(String msg) {
   while(emergency) {
-    Serial.println("Emergency tripped: " + emergencyMsg);
+    Serial.println("Emergency tripped -> " + msg);
     delay(500);
   }
 }
+void reset() {
 
+  odrive.ClearErrors(axis_steering);
+  delay(100);
+  odrive.ClearErrors(axis_braking);
+  delay(100);
+  armOdrive();
+  Serial.println("resetting odrive");
+}
+
+void debouncereset(){
+    if(((long)(micros() - last_micros) >= debouncing_time * 1000)&&!armed) {
+    reset();
+    last_micros = micros();
+  }
+}
 void setup() {
   // begin the SBUS communication
-
+  
   x8r.begin();
+  //pinMode(reset_switch, INPUT_PULLUP);
   analogWriteResolution(12);
   Serial.begin(9600);
   Serial3.begin(115200);
-  pinMode(relay_in, OUTPUT);
-  digitalWrite(relay_in, HIGH);
-
+  pinMode(emergency_relay, OUTPUT);
+  digitalWrite(emergency_relay, HIGH);
+  pinMode(LED_BUILTIN,OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(reset_switch),debouncereset,CHANGE);
+  
 }
 
 void loop() {
   //Serial.println(odrive.Heartbeat());
-  if (emergency)
-  {
-    killSystem();
-  }
 
   float channels[16]; bool failSafe; bool lostFrame;
 
@@ -94,69 +119,89 @@ void loop() {
       for(int i=0;i<16;i++){
         x8r.readCal(&channels[i],&failSafe,&lostFrame);
         //Serial.println("Channel "+i);
-        Serial.println(channels[i]);
+        //Serial.println(channels[i]);
     }
-    if(channels[4]>0){
-      digitalWrite(relay_in, LOW);
+
+    if(channels[4]>-0.5){
+      digitalWrite(emergency_relay, LOW);
     }
     else{
-      digitalWrite(relay_in, HIGH);
+      digitalWrite(emergency_relay, HIGH);
     }
- 
-
+    
     //odrive arming with SF toggle switch on controller
     Serial.println("odrive armed: ");
     Serial.println(armed);
     Serial.println(" ");
 
-    if(channels[5]>0&&!armed){
+    if((channels[5]>0)&&(!armed)&&(!armed_controller)){
+      Serial.println("uh what");
       armOdrive();
+    }
+    if(reset_state){
+      digitalWrite(LED_BUILTIN,HIGH);
+    }
+    else{
+      digitalWrite(LED_BUILTIN,LOW);
     }
 
 
     // deadman controls
-    if(channels[0]-controller_deadband>0){
+    if((channels[0]-controller_deadband>0)&&armed){
       odrive.SetTorque(1, 0);
       
-      if(channels[4]>0){
+      if(channels[4]>-0.5){
         //channel 3 is deadman switchxz
         int controller_throttle = maxthrottle*channels[0];
-        Serial.println("throttle value: ");
-        Serial.println(controller_throttle);
+        //Serial.println("throttle value: ");
+        //Serial.println(controller_throttle);
         analogWrite(throttle, (int)controller_throttle);
       }
-      else{
-        analogWrite(throttle, 0);
-        
-        //go into emergency
-        emergency = true;
-        emergencyMsg =  "Dead man switch fault";
-        return;
-      }
+
     }
-    else{ // brake
+    else if((channels[0]<(0-controller_deadband)) &&armed){ // brake
       //if the channel value is not within the deadband and more than zero, set throttle to zero
       analogWrite(throttle, 0);
 
-      int controller_braking = max_brake*channels[0];
+      float controller_braking = max_brake*channels[0];
 
       Serial.println("braking value: ");
       Serial.println(controller_braking);
+      
       odrive.SetTorque(axis_braking, controller_braking);
     }
+    else{
+      analogWrite(throttle, 0);
+      odrive.SetTorque(axis_braking,0);
+    }
     
+
+
+
+
+
+    if((odrive.GetAxisError(axis_braking)!=0 || odrive.GetAxisError(axis_steering)!=0) && armed_controller){
+      armed=false;
+      Serial.println("odrive error: ");
+      Serial.println(odrive.GetAxisError(axis_steering));
+      Serial.println(odrive.GetAxisError(axis_braking));
+      //emergency=true;
+      //killSystem("odrive error, needs reseting");
+    }
+
+
     int controller_steering=int(10*channels[1]);
     //check to see if steering value has changed
 
     if(controller_steering!=prev && armed&&(abs(channels[1])<=1)){
       //if it has, change the position of the odrive
-      Serial.println("steering");
-      Serial.println(controller_steering);
+      //Serial.println("steering");
+      //Serial.println(controller_steering);
       prev=controller_steering;
       odrive.SetPosition(axis_steering,controller_steering);
-      Serial.println("odrive position");
+      //Serial.println("odrive position");
       
-      Serial.println(odrive.GetPosition(axis_steering));
+      //Serial.println(odrive.GetPosition(axis_steering));
     
     }
     
@@ -169,8 +214,8 @@ void loop() {
   // state checks
 
   if (odrive.Heartbeat() == -1) {
-    emergency = true;
-    emergencyMsg = "Odrive Heartbeat: " + odrive.Heartbeat();
-    return;
+    int test=0;
+    //emergency = true;
+    // killSystem("Odrive Heartbeat: " + odrive.Heartbeat());
   }
 }
