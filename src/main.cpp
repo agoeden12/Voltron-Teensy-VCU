@@ -48,9 +48,11 @@ void safety_thread(){
     }
     else{
       vcu.safety_state=teensy_voltron::VOLTRON_EMERGENCY;
+      if(vcu.armed){
+        killSystem("uh, idk");
+      }
+      
     }
-
-    
   }
 }
 
@@ -86,14 +88,6 @@ void loop() {
         //Serial.println(channels[i]);
     }
     deadman_val=channels[4];
-    
-    if(channels[4]>-0.5){
-      digitalWrite(emergency_relay, LOW);
-    }
-    else{
-      digitalWrite(emergency_relay, HIGH);
-    }
-    
     //odrive arming with SF toggle switch on controller
     Serial.println("odrive armed: ");
     Serial.println(vcu.armed);
@@ -109,11 +103,12 @@ void loop() {
     if((channels[5]>0)&&(!vcu.armed)&&(!vcu.armed_controller)){
       //Serial.println("uh what");
       vcu.armOdrive();
+
     }
 
 
     // deadman controls
-    if((channels[0]-controller_deadband>0)&&vcu.armed){
+    if((channels[0]-controller_deadband>0)&&(vcu.safety_state>=teensy_voltron::VOLTRON_CONTROL_READY){
       if(channels[4]>-0.5){
         //channel 3 is deadman switchxz
         digitalWrite(emergency_relay, LOW);
@@ -124,7 +119,7 @@ void loop() {
       }
 
     }
-    else if((channels[0]<(0-controller_deadband)) &&vcu.armed){ // brake
+    else if((channels[0]<(0-controller_deadband)) &&(vcu.safety_state>=teensy_voltron::VOLTRON_IDLE)){ // brake
       //if the channel value is not within the deadband and more than zero, set throttle to zero
       analogWrite(throttle, 0);
 
@@ -141,7 +136,7 @@ void loop() {
       vcu.brake(0);
     }
 
-    if(vcu.armed&&(abs(channels[1])<=1)){
+    if((vcu.safety_state>=teensy_voltron::VOLTRON_IDLE)&&(abs(channels[1])<=1)){
       vcu.steer(channels[1]);    
     }
     
