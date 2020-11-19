@@ -44,6 +44,7 @@ void teensy_voltron::odrive_reset() {
   delay(100);
   armOdrive();
   Serial.println("resetting odrive");
+  
 }
 
 

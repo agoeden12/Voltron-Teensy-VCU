@@ -8,6 +8,7 @@
             "includePath": [
                 "/home/benhall/dev/teensy-voltron/include",
                 "/home/benhall/dev/teensy-voltron/src",
+                "/home/benhall/dev/teensy-voltron/lib/TeensyThreads",
                 "/home/benhall/dev/teensy-voltron/.pio/libdeps/teensy35/ODriveArduino",
                 "/home/benhall/.platformio/packages/framework-arduinoteensy/cores/teensy3",
                 "/home/benhall/.platformio/lib/Firmata",
@@ -121,6 +122,7 @@
                 "path": [
                     "/home/benhall/dev/teensy-voltron/include",
                     "/home/benhall/dev/teensy-voltron/src",
+                    "/home/benhall/dev/teensy-voltron/lib/TeensyThreads",
                     "/home/benhall/dev/teensy-voltron/.pio/libdeps/teensy35/ODriveArduino",
                     "/home/benhall/.platformio/packages/framework-arduinoteensy/cores/teensy3",
                     "/home/benhall/.platformio/lib/Firmata",

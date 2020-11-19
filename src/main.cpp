@@ -37,7 +37,11 @@ void killSystem(String msg) {
 
 void safety_thread(){
   while(1){
-    if(!digitalRead(e_stop_state)&&!vcu.odrive_error()){
+    Serial.println("Testing threading");
+    //TODO: the e-stop state button will need to be added once it is on the kart
+    //
+    //if(!digitalRead(e_stop_state)&&!vcu.odrive_error()){
+    if(!vcu.odrive_error()){
       if(deadman_val>-0.5){
         vcu.safety_state=teensy_voltron::VOLTRON_CONTROL_READY;
       }
@@ -84,8 +88,8 @@ void loop() {
     //Serial.println((float)channels[0]);
       for(int i=0;i<16;i++){
         x8r.readCal(&channels[i],&failSafe,&lostFrame);
-        //Serial.println("Channel "+i);
-        //Serial.println(channels[i]);
+        Serial.println("Channel "+i);
+        Serial.println(channels[i]);
     }
     deadman_val=channels[4];
     //odrive arming with SF toggle switch on controller
@@ -105,10 +109,8 @@ void loop() {
       vcu.armOdrive();
 
     }
-
-
     // deadman controls
-    if((channels[0]-controller_deadband>0)&&(vcu.safety_state>=teensy_voltron::VOLTRON_CONTROL_READY){
+    if((channels[0]-controller_deadband>0)&&(vcu.safety_state>=teensy_voltron::VOLTRON_CONTROL_READY)){
       if(channels[4]>-0.5){
         //channel 3 is deadman switchxz
         digitalWrite(emergency_relay, LOW);
