@@ -221,25 +221,20 @@ void loop() {
         heartbeatTask1.incrCounter();
 
       } else if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
-        // blink
-        // led_status = !led_status;
-        digitalWrite(ledPin, HIGH);
+        mavlink_heartbeat_t hbm;
+        mavlink_msg_heartbeat_decode(&msg, &hbm);
 
-        mavlink_heartbeat_t heartbeat;
-        mavlink_msg_heartbeat_decode(&msg, &heartbeat);
-
-        Serial.printf(
-            "HBEAT %s(%d);%d;%d;%d;%d\n",
-            (MAV_TYPE_GROUND_ROVER == heartbeat.type) ? "ROVER" : "UNKNOWN",
-            heartbeat.type, static_cast<int>(heartbeat.autopilot),
-            static_cast<int>(heartbeat.base_mode),
-            static_cast<uint32_t>(heartbeat.custom_mode),
-            static_cast<int>(heartbeat.system_status));
+        Serial.printf("HBEAT %s(%d);%d;%d;%d;%d\n",
+                      (MAV_TYPE_GROUND_ROVER == hbm.type) ? "ROVER" : "UNKNOWN",
+                      hbm.type, static_cast<int>(hbm.autopilot),
+                      static_cast<int>(hbm.base_mode),
+                      static_cast<uint32_t>(hbm.custom_mode),
+                      static_cast<int>(hbm.system_status));
 
         heartbeatTask0.incrCounter();
 
-        if (heartbeat.base_mode & MAV_MODE_FLAG_CUSTOM_MODE_ENABLED) {
-          auto base_custom_mode = static_cast<uint32_t>(heartbeat.custom_mode);
+        if (hbm.base_mode & MAV_MODE_FLAG_CUSTOM_MODE_ENABLED) {
+          int base_custom_mode = static_cast<int>(hbm.custom_mode);
           switch (base_custom_mode) {
             case int(ROVER_MODE_ACRO):
               Serial.println("ROVER_MODE_ACRO");
@@ -278,6 +273,8 @@ void loop() {
         Serial.flush();
 
         // blink
+        digitalWrite(ledPin, HIGH);
+        delay(10);
         digitalWrite(ledPin, LOW);
 
       } else {
