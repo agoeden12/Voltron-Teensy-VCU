@@ -132,7 +132,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #define __QUADDECODE_H__
 
 #include <stdint.h>
-#include "mk20dx128.h"
+// #include "mk20dx128.h"
 #include "core_pins.h"
 
 // Keep track of previous Interrupt to determine direction

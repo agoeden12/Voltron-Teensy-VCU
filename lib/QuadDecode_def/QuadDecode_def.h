@@ -25,7 +25,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "QuadDecode.h"
 #include "wiring.h"
-#include "mk20dx128.h"
+// #include "mk20dx128.h"
 #include "usb_serial.h"
 #include <inttypes.h>
 

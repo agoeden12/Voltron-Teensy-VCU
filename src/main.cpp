@@ -1,412 +1,289 @@
+#define USE_TEENSY_HW_SERIAL
+#define PID FastFloatPID
+#define relay_pin 24
+#define ledPin 13
+#define USE_USBCON
+
 #include <Arduino.h>
 #include <Chrono.h>
 #include <FastFloatPID.h>
-#include <FlexCAN.h>  
-#include <ros.h>
-#include <std_msgs/Float32.h>
-#include <std_msgs/Bool.h>
 #include <math.h>
+
+#ifdef WITH_QUAD_DECODE
 #include "QuadDecode_def.h"
+#endif
 
-#include <std_msgs/UInt16MultiArray.h>
-#include <std_msgs/MultiArrayDimension.h>
-#include <std_msgs/MultiArrayLayout.h>
 #include <SatelliteReceiver.h>
+#include <ardupilotmega/mavlink.h>
 
+// ******* TASK MANAGEMENT ****** //
+#include <ExecWithParameter.h>
+#include <TaskManagerIO.h>
 
-#define USE_TEENSY_HW_SERIAL
-#define PID FastFloatPID
-#define throttle A22
-#define regen A22
-#define relay_pin 24
+#define throttle A17
+#define regen A17
 
-void state_set(const std_msgs::Bool &emstate);
-void target_set(const std_msgs::Float32 &v_msg);
+#define TELEM_BAUD_RATE 921600
 
-ros::NodeHandle nh;
-
-std_msgs::Float32 cart_speed;
-
-
-std_msgs::UInt16MultiArray array_msg;
-std_msgs::MultiArrayDimension myDim;
-std_msgs::MultiArrayLayout myLayout;
-ros::Publisher int16Pub("teensyRX", &array_msg);
-
-#define ledPin 13
-SatelliteReceiver SpektrumRx;
-#define USE_USBCON
-uint16_t update = 0;
-
-
-
+// ------------------------------------------------------------
+static SatelliteReceiver SpektrumRx;
+static uint16_t update = 0;
 
 // -------------------------------------------------------------
-
-ros::Publisher
-pub_speed("Cart_Speed",
-			&cart_speed); // TODO Create custome msg that sends back all data
-ros::Subscriber<std_msgs::Float32> sub("/tvelocity", &target_set);
-ros::Subscriber<std_msgs::Bool> sub_em("/rc_in_node/cmd_stop", &state_set);
+static elapsedMicros freq;  // used to track totalloop time
+static elapsedMillis enct;
+static Chrono syncmet;     // used to regulate outer loop tomes to prevent sync
+                           // errrors with inner loops
+static Chrono rosmet;      // used to regulate ros update rate
+static Chrono controlmet;  // used to regulate cotroller loop update rate
+static Chrono acommet;     // used to regulat serail update rate
+static Chrono rosheartbeat;     // stops cart if no controller input
+static Chrono serialheartbeat;  // stops cart if no controller input
+static int shbtimeout = 5000;
 
 // -------------------------------------------------------------
-// used for reciving messages from the kelly
-static CAN_message_t rmsg;
-static uint8_t hex[17] = "0123456789abcdef";
+static int stime = 10;  // sample time of controll loop and enconder vel
+static double Kp = 4.61, Ki = 0, Kd = 0, Kf = 0.98;  // pid vals
+static float t_rpm = 0;  // variable the PID controller operates on
+static float m_rpm = 0;
+static float o_set = 0;
 
-class Kellylisten : public CANListener {
-public:
-	void kellyRpm(CAN_message_t &frame, int mailbox);
+static PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd,
+                 DIRECT);  // create pid controller
+static int output = 0;
 
-	bool frameHandler(CAN_message_t &frame, int mailbox,
-					uint8_t controller); // overrides the parent version so
-										// we can actually do something
+#ifdef WITH_QUAD_DECODE
+static QuadDecode<1> menc;  // creates enconder pins 3,4
+#endif
+
+static float countsrev = 1042;  // encoder ticks
+static float filtrpm = 0;       // creates low pass filter for encoder
+static float filt = 0.90;       // filter param
+static float fixitnum = 0.83;
+static float torpm = 100 * 60 / countsrev * fixitnum;
+static float ofiltval = 0;  // creates low pass filter for encoder
+static float ofilt = 0.90;  // filter param
+
+static float dband = 200;  // encoder deadband setting
+static float maxthrottle = 2048;
+
+//******** MAVLINK DEFS **********//
+#define SYSTEM_ID 1
+#define COMP_ID 22
+
+static uint8_t rawbuf[MAVLINK_MAX_PACKET_LEN];
+static uint8_t readbuf[128];
+
+static bool led_status = 0;
+
+// --------- MAV sender --------- //
+static void __mavsend(mavlink_message_t& msg) {
+  // prepare message
+  uint8_t crc_extra =
+      mavlink_get_crc_extra(&msg);  //< get extra crc for given message
+  uint8_t lmin =
+      mavlink_min_message_length(&msg);  //< get min length for given message
+
+  uint16_t finlen = mavlink_finalize_message_chan(&msg, msg.sysid, msg.compid,
+                                                  0, lmin, msg.len, crc_extra);
+
+  uint16_t len = mavlink_msg_to_send_buffer(&rawbuf[0], &msg);
+
+  Serial1.write(rawbuf, MAVLINK_NUM_NON_PAYLOAD_BYTES + (uint16_t)msg.len);
+}
+
+bool __reqmsg(uint8_t sysid, uint8_t compid, uint32_t msg_id, uint32_t usecT) {
+  mavlink_message_t msg;
+  mavlink_msg_command_long_pack(sysid, compid, &msg, sysid, MAV_COMP_ID_ALL,
+                                MAV_CMD_SET_MESSAGE_INTERVAL, 1, float(msg_id),
+                                float(uint16_t(usecT)) /* interval in usecs */,
+                                0 /* all */, 0, 0, 0, 0);
+
+  __mavsend(msg);
+  return true;
+}
+// ************** PERIODIC TASKS ************//
+class HeartBeatTask : public Executable {
+ private:
+  uint8_t __sysid;
+  uint8_t __compid;
+  uint32_t __counter;
+
+ public:
+  HeartBeatTask(uint8_t compid, uint8_t sysid = SYSTEM_ID) {
+    __compid = compid;
+    __sysid = sysid;
+    __counter = 0;
+  }
+
+  void setSysId(uint8_t sysid) { __sysid = sysid; }
+  void setCompId(uint8_t compid) { __compid = compid; }
+  void incrCounter() { __counter++; }
+
+  void exec() override {
+    mavlink_message_t msg;
+
+    if (Serial1.availableForWrite() > 1) {
+      mavlink_msg_heartbeat_pack(__sysid, __compid, &msg, MAV_TYPE_GROUND_ROVER,
+                                 MAV_AUTOPILOT_GENERIC, MAV_MODE_PREFLIGHT,
+                                 __counter, MAV_STATE_ACTIVE);
+      __mavsend(msg);
+      //   printf("Sent hb for comp %d\n", int(__compid));
+    }
+  }
 };
 
-void Kellylisten::kellyRpm(CAN_message_t &frame, int mailbox) {
-	//m_rpm = uint16_t((frame.buf[0] << 8) + frame.buf[1]); // rpm
-//cart_speed.data = m_rpm;
-}
+static HeartBeatTask heartbeatTask0(COMP_ID, SYSTEM_ID);
 
-bool Kellylisten::frameHandler(CAN_message_t &frame, int mailbox,
-							uint8_t controller) {
-	if (frame.id == 0x73)
-		kellyRpm(frame, mailbox);
-	return true;
-}
-
-Kellylisten kellylisten;
-// -------------------------------------------------------------
-
-// -------------------------------------------------------------
-
-// -------------------------------------------------------------
-elapsedMicros freq;//used to track totalloop time
-elapsedMillis enct;
-Chrono syncmet;// used to regulate outer loop tomes to prevent sync errrors with inner loops
-Chrono rosmet;// used to regulate ros update rate
-Chrono controlmet;// used to regulate cotroller loop update rate
-Chrono acommet;// used to regulat serail update rate
-Chrono rosheartbeat;// stops cart if no controller input
-Chrono serialheartbeat; //stops cart if no controller input
-int shbtimeout = 5000;
-
-// -------------------------------------------------------------
-int stime=10; // sample time of controll loop and enconder vel
-double Kp = 4.61, Ki = 0, Kd = 0, Kf = 0.98; // pid vals
-float t_rpm = 0; // variable the PID controller operates on
-float m_rpm = 0;
-float o_set = 0;
-
-PID myPID(&m_rpm, &o_set, &t_rpm, Kp, Ki, Kd, DIRECT);// create pid controller
-int output=0;
-QuadDecode<1> menc;// creates enconder pins 3,4
-
-float countsrev=1042;//encoder ticks
-float filtrpm=0; // creates low pass filter for encoder
-float filt=0.90; // filter param
-float fixitnum=0.83;
-float torpm=100*60/countsrev*fixitnum;
-
-float ofiltval=0; // creates low pass filter for encoder
-float ofilt=0.90; // filter param
-
-
-
-float dband=200; // encoder deadband setting
-float maxthrottle=2048;
-
+static HeartBeatTask heartbeatTask1(45, SYSTEM_ID);
 
 // -------------------------------------------------------------
 void setup() {
-	delay(1000);
-	// -------------------------------------------------------------
+  delay(1000);
 
-	pinMode(relay_pin, OUTPUT);
-	digitalWrite(relay_pin, LOW);
+  // -------------------------------------------------------------
+  pinMode(relay_pin, OUTPUT);
+  // digitalWrite(relay_pin, LOW);
+  digitalWrite(relay_pin, HIGH);
 
-	analogWriteResolution(12);
-	myPID.SetMode(AUTOMATIC);
-	myPID.SetSampleTime(stime/1000.0);
-	// myPID.SetOutputLimits(-993, 993);
-	myPID.SetOutputLimits(-2048, 2048);
+  analogWriteResolution(12);
+  myPID.SetMode(AUTOMATIC);
+  myPID.SetSampleTime(stime / 1000.0);
+  // myPID.SetOutputLimits(-993, 993);
+  myPID.SetOutputLimits(-2048, 2048);
 
-	menc.setup();
-    menc.start();
+#ifdef WITH_QUAD_DECODE
+  menc.setup();
+  menc.start();
+#endif
 
-	// -------------------------------------------------------------
-	// Can0.begin(1000000);
-	Serial2.begin(115200);
-	Serial2.println("init");
-	// -------------------------------------------------------------
-// 	Can0.begin(1000000);
-// 	Can0.attachObj(&kellylisten);
+  // -------------------------------------------------------------
+  Serial.begin(TELEM_BAUD_RATE);
 
-// 	CAN_filter_t allPassFilter;
-// 	allPassFilter.id = 0;
-// 	allPassFilter.ext = 0;
-// 	allPassFilter.rtr = 0;
+  Serial2.begin(TELEM_BAUD_RATE);
+  // Serial2.println("init");
 
-// 	for (uint8_t filterNum = 0; filterNum < 16; filterNum++) {
-// 		Can0.setFilter(allPassFilter, filterNum);
+  Serial1.begin(TELEM_BAUD_RATE);
+  // Serial1.setTimeout(1);
 
-// 	}
-// 	for (uint8_t filterNum = 0; filterNum < 16; filterNum++) {
-// 		kellylisten.attachMBHandler(filterNum);
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
 
-// 	}
-// 	rmsg.ext = 0;
-// 	rmsg.id = 0x6b;
-// 	rmsg.len = 1;
-// 	rmsg.buf[0] = 0x37;
-// 	rmsg.buf[1] = 0;
-// 	rmsg.buf[2] = 0;
-// 	rmsg.buf[3] = 0;
-// 	rmsg.buf[4] = 0;
-// 	rmsg.buf[5] = 0;
-// 	rmsg.buf[6] = 0;
-// 	rmsg.buf[7] = 0;
+  // ----- start periodic tasks ---- //
+  taskManager.scheduleFixedRate(500, &heartbeatTask0);  // each 500 millis
+  taskManager.scheduleFixedRate(100, &heartbeatTask1);  // each 50 millis
 
-// 	Can0.write(rmsg);
+  // ----- request mav messages ---- //
+  __reqmsg(SYSTEM_ID, COMP_ID, MAVLINK_MSG_ID_GLOBAL_POSITION_INT, 30000);
 
-	// -------------------------------------------------------------
-	pinMode(ledPin, OUTPUT);
-	// ------------------------------------------------------------
-	nh.getHardware()->setBaud(57600);
-	nh.initNode();
-	nh.advertise(pub_speed);
-	nh.subscribe(sub);
-	nh.subscribe(sub_em);
+  delay(20);
+  __reqmsg(SYSTEM_ID, COMP_ID, MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 20000);
 
-
-	myDim.label = "channels";
- 	myDim.size = 7;
-  	myDim.stride = 1;
-  	myLayout.dim = (std_msgs::MultiArrayDimension *)malloc(sizeof(std_msgs::MultiArrayDimension) * 1);
-  	myLayout.dim[0] = myDim;
- 	 myLayout.data_offset = 0;
-  	array_msg.layout = myLayout;
- 	 array_msg.data = (uint16_t *)malloc(sizeof(uint16_t) * 7);
- 	 array_msg.data_length = 7;
-
- 	 nh.advertise(int16Pub);
-  
- 	 Serial1.begin(115200);
- 	 Serial1.setTimeout(1);
-
-
-
+  delay(20);
+  __reqmsg(SYSTEM_ID, COMP_ID, MAVLINK_MSG_ID_ATTITUDE, 20000);
 }
 
 void loop() {
-//if(syncmet.hasPassed(5,true)){
-SpektrumRx.getFrame();
+  // ---- execute scheduer loop ---- //
+  taskManager.runLoop();
 
-  array_msg.data[0] = SpektrumRx.getAile();
-  array_msg.data[1] = SpektrumRx.getElev();
-  array_msg.data[2] = SpektrumRx.getThro();
-  array_msg.data[3] = SpektrumRx.getRudd();
-  array_msg.data[4] = SpektrumRx.getGear();
-  array_msg.data[5] = SpektrumRx.getAux1();
-  array_msg.data[6] = update;
- 	if (SpektrumRx.getAux1() > 1000)
-  {
-    digitalWrite(ledPin, 1);
-  }
-  else
-  {
-    digitalWrite(ledPin, 0);
-  }
-  
- 
+  // ---- communicate with others --- //
+  mavlink_message_t msg;
+  mavlink_status_t status;
 
+  uint32_t mcast_id = -1;
+  uint32_t inst_id = -1;
 
+  int to_read = Serial1.available();
+  size_t read = Serial1.readBytes(&rawbuf[0], to_read);
 
-	// -------------------------------------------------------------
-	// Serial.print("test");
-	
+  for (int i = 0; i < read; i++) {
+    uint8_t ch = rawbuf[i];
 
-	// -------------------------------------------------------------
+    if (mavlink_parse_char(0, ch, &msg, &status) ==
+        MAVLINK_FRAMING_OK) {  // message received
+      mavlink_message_t* rxmsg = (mavlink_message_t*)(&msg);
 
-	// -------------------------------------------------------------
+      if (rxmsg->msgid == MAVLINK_MSG_ID_LOCAL_POSITION_NED) {
+        mavlink_local_position_ned_t lpos;
+        mavlink_msg_local_position_ned_decode(rxmsg, &lpos);
 
+        // Serial.printf("LPOS %f;%f;%f;%f;%f,%f\n", lpos.x, lpos.y, lpos.z,
+        //               lpos.vx, lpos.vy, lpos.vz);
 
-	// if (kellymet.hasPassed(stime, true)) {
+      } else if (rxmsg->msgid == MAVLINK_MSG_ID_ATTITUDE) {
+        mavlink_attitude_t att;
+        mavlink_msg_attitude_decode(rxmsg, &att);
 
-	// 	if (issim) {
-	// 		m_rpm = sim_rpm;
-	// 		cart_speed.data = m_rpm;
-	// 	} else {
+        Serial.printf("ATT %f;%f;%f;%f;%f,%f\n", att.pitch, att.roll, att.yaw,
+                      att.pitchspeed, att.rollspeed, att.yawspeed);
+        Serial.flush();
+        heartbeatTask1.incrCounter();
 
-	// 		Can0.write(rmsg);
-	// 	}
-	// 	cart_speed.data = t_rpm;
-	// 	myPID.Compute();
-	// 	kellysim();
-	// }
-	if(controlmet.hasPassed(stime, true)){//if the control loop is time to run its run
-		int curpos =menc.calcPosn();
-		 if(abs(curpos)<(dband/(torpm))){//dead band
-           filtrpm=filt*filtrpm;
+      } else if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
+        // blink
+        // led_status = !led_status;
+        digitalWrite(ledPin, HIGH);
+
+        mavlink_heartbeat_t heartbeat;
+        mavlink_msg_heartbeat_decode(&msg, &heartbeat);
+
+        Serial.printf(
+            "HBEAT %s(%d);%d;%d;%d;%d\n",
+            (MAV_TYPE_GROUND_ROVER == heartbeat.type) ? "ROVER" : "UNKNOWN",
+            heartbeat.type, static_cast<int>(heartbeat.autopilot),
+            static_cast<int>(heartbeat.base_mode),
+            static_cast<uint32_t>(heartbeat.custom_mode),
+            static_cast<int>(heartbeat.system_status));
+
+        heartbeatTask0.incrCounter();
+
+        if (heartbeat.base_mode & MAV_MODE_FLAG_CUSTOM_MODE_ENABLED) {
+          auto base_custom_mode = static_cast<uint32_t>(heartbeat.custom_mode);
+          switch (base_custom_mode) {
+            case int(ROVER_MODE_ACRO):
+              Serial.println("ROVER_MODE_ACRO");
+              break;
+            case int(ROVER_MODE_STEERING):
+              Serial.println("ROVER_MODE_STEERING");
+              break;
+            case int(ROVER_MODE_HOLD):
+              Serial.println("ROVER_MODE_HOLD");
+              break;
+            case int(ROVER_MODE_LOITER):
+              Serial.println("ROVER_MODE_LOITER");
+              break;
+            case int(ROVER_MODE_AUTO):
+              Serial.println("ROVER_MODE_AUTO");
+              break;
+            case int(ROVER_MODE_RTL):
+              Serial.println("ROVER_MODE_RTL");
+              break;
+            case int(ROVER_MODE_SMART_RTL):
+              Serial.println("ROVER_MODE_SMART_RTL");
+              break;
+            case int(ROVER_MODE_GUIDED):
+              Serial.println("ROVER_MODE_GUIDED");
+              break;
+            case int(ROVER_MODE_INITIALIZING):
+              Serial.println("ROVER_MODE_INITIALIZING");
+              break;
+            case int(ROVER_MODE_MANUAL):
+              Serial.println("ROVER_MODE_MANUAL");
+              break;
+            default:
+              break;
+          }
         }
-        else{
-        filtrpm = filt*filtrpm+(1-filt)*(curpos);//low pass filter
-		}
-		//counts per 10ms
-	   //filtrpm = (menc.calcPosn()/(countsrev*enct));
-    
-        m_rpm=(-filtrpm);
-	
-		menc.zeroFTM();
-    	cart_speed.data = -filtrpm*torpm;// ros speed update
-    	myPID.Compute();// pid update
-	
-	}
+        Serial.flush();
 
+        // blink
+        digitalWrite(ledPin, LOW);
 
-	if (!rosheartbeat.hasPassed(1000) ||
-		!serialheartbeat.hasPassed(shbtimeout)) {
-		//digitalWrite(LED_BUILTIN,HIGH);
-		output=0;
-		ofiltval = ofilt*ofiltval+(1-ofilt)*(Kf*t_rpm+o_set);
-		
-		output = (int)ofiltval;
-		if(t_rpm<0){
-			output=output-600;
-		}
-		if(t_rpm>0){
-			output = output+600;
-		}
-		if(t_rpm==0){
-			if(output<0){
-			output=output-600;
-		}
-			if(output>0){
-			output = output+600;
-		}
+      } else {
+        // Serial.printf("Mavlink MSG ID : %d\n", rxmsg->msgid);
+      }
 
-		}
-		if(abs(output)>maxthrottle){
-
-			if(output<0){
-				output=-maxthrottle;
-			}
-			if(output>0){
-				output = maxthrottle;
-			}
-		}
-
-
-		
-		analogWrite(throttle, output + 2048);
-	} else {
-
-		analogWrite(throttle, 2048);
-	}
-	// -------------------------------------------------------------
-	if (acommet.hasPassed(100, true)) {
-		Serial2.println(" \f motor rpm " + String(m_rpm*torpm) + " target rpm " +
-						String(t_rpm*torpm) + " motor set " + String(o_set+Kf*t_rpm));
-		Serial2.println("Kp: " + String(Kp/torpm) + " Ki: " + String(Ki/torpm) + " Kd: "+String(Kd/torpm) +" Kf: "+String(Kf/torpm) );
-		Serial2.println("Filtconst: "+String(filt)+ " Khz " + String(1.0 / (freq / 1000.0))+" tm "+String(shbtimeout) + " deadband " +  String(dband));
-		Serial2.println("use letters p, i, d, f, c, m, h  value to set parameters\n");
-				Serial2.println("  motor rpm " + String(m_rpm) + " target rpm " +
-						String(t_rpm) + " motor set " + String(o_set+Kf*t_rpm));
-		Serial2.println("Kp: " + String(Kp) + " Ki: " + String(Ki) + " Kd: "+String(Kd) +" Kf: "+String(Kf) );
-		for (int i= 0; i<7;i++){
-			Serial2.print(String(array_msg.data[i])+" ");
-		}
-		Serial2.println("");
-		// Serial2.print("mr,"+String(m_rpm)+'\n');
-		// Serial2.print("mt,"+String(t_rpm)+'\n');
-		// Serial2.print("mo,"+String(o_set)+'\n');
-		
-		// Serial2.print("kp,"+String(Kp)+'\n');
-		// Serial2.print("ki,"+String(Ki)+'\n');
-		// Serial2.print("kd,"+String(Kd)+'\n');
-		
-		// Serial2.print("to,"+String(shbtimeout)+'\n');
-		// Serial2.print("hz,"+String(1.0 / (freq / 1000.0))+'\n');
-		// Serial2.flush();
-	}
-	freq = 0;
-	if (Serial2.available() > 1) {
-
-		switch (Serial2.read()) {
-		case /* value */ 'p':
-			Kp = Serial2.parseFloat()*torpm;
-			myPID.SetTunings(Kp, Ki, Kd);
-			Serial2.println("Kp set to: " + String(Kp));
-			break;
-
-		case /* value */ 'i':
-			Ki = Serial2.parseFloat()*torpm;
-			myPID.SetTunings(Kp, Ki, Kd);
-			Serial2.println("Ki set to: " + String(Ki));
-			break;
-
-		case /* value */ 'd':
-			Kd = Serial2.parseFloat()*torpm;
-			myPID.SetTunings(Kp, Ki, Kd);
-			Serial2.println("Kd set to: " + String(Kd));
-			break;
-		case /* value */ 'f':
-			Kf = Serial2.parseFloat()*torpm;
-			
-			Serial2.println("Kf set to: " + String(Kf/torpm));
-			break;
-	
-		case /* value */ 'c':
-			filt = Serial2.parseFloat();
-			
-			Serial2.println("filt set to: " + String(filt));
-			break;	
-		case /* value */ 'm':
-			t_rpm = Serial2.parseInt()/(torpm);
-			serialheartbeat.restart();
-			Serial2.println("Motor set to: " + String(t_rpm*torpm));
-			break;
-		case /* value */ 'h':
-			shbtimeout = Serial2.parseInt();
-			Serial2.println("Timeout set to: " + String(shbtimeout));
-			break;
-		case  'b':
-			dband = Serial2.parseFloat();
-			Serial2.println("Deband set to  " + String(dband) );
-			break;
-		case 't':
-			maxthrottle= Serial.parseFloat();
-			Serial2.println("Max Throttle set to  " + String(maxthrottle) );
-			break;
-		case 'o':
-			ofilt= Serial.parseFloat();
-			Serial2.println("Max Throttle set to  " + String(ofilt) );
-			break;	
-		}
-	}
-	if (rosmet.hasPassed(20)) {
-		rosmet.restart();
-		pub_speed.publish(&cart_speed);
-		
-        int16Pub.publish(&array_msg);
-        nh.spinOnce();
-	    update++;
-	}
-//}
+    }  // if
+  }
 }
-
-void target_set(const std_msgs::Float32 &v_msg) {
-	t_rpm = v_msg.data/torpm;
-	rosheartbeat.restart();
-	digitalWrite(LED_BUILTIN,HIGH);
-
-}
-
-void state_set(const std_msgs::Bool &em_state) {
-	if (em_state.data) {
-		digitalWrite(relay_pin, HIGH); // relay on for electromagnet
-	} else {
-		digitalWrite(relay_pin, LOW); // relay off for electromagnet
-	}
-}
-
