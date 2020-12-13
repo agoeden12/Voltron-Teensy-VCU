@@ -26,14 +26,25 @@ int axis_steering = 3;
 int axis_braking=5;
 
 
+enum odrive_satus{
+  no_error=0,
+  startup=1,
+  error=2
+};
 
+
+int odrive_st=startup;
 ODriveTeensyCAN odrive;
 
-
+SimpleTimer check_odrive;
 bool armed=false;
 
 bool emergency=false;
-
+void checkOdrive() {
+  if(odrive.GetAxisError(axis_braking)!=0 || odrive.GetAxisError(axis_steering)!=0){
+    odrive_st = error;
+  }
+}
 void setup() {
   // begin the SBUS communication
 
@@ -48,11 +59,9 @@ void setup() {
   pinMode(deadman_switch_led,OUTPUT);
   
   digitalWrite(relay_in, HIGH);
-  
 
-
-  
-
+  //check the odrive for axis errors every 250ms
+  check_odrive.setInterval(250,checkOdrive);
 
 
 }
@@ -91,7 +100,7 @@ void armOdrive() {
     delay(250);
     Serial.println("waiting...");
   }
-  armed=true;
+  odrive_st=no_error;
   digitalWrite(ODRIVE_status_led, HIGH); 
 }
 void odrive_reset() {
@@ -128,9 +137,10 @@ void armOdrivefull() {
     delay(250);
     Serial.println("waiting...");
   }
-  armed=true;
+  odrive_st=no_error;
   digitalWrite(ODRIVE_status_led, HIGH); 
 }
+
 
 
 
@@ -224,7 +234,7 @@ void loop(){
       digitalWrite(deadman_switch_led,LOW);
     }
     
-    if(odrive.GetAxisError(axis_braking)!=0 || odrive.GetAxisError(axis_steering)!=0){
+    if(odrive_st==no_error){
       digitalWrite(ODRIVE_status_led,LOW);
     }
     else{
@@ -237,7 +247,7 @@ void loop(){
     //}
     //else{
     //Serial.println(arm_switch);
-    if((arm_switch==0)&&!armed){
+    if((arm_switch==0)&&odrive_st==startup){
       //Serial.println("attempting to arm");
       armOdrive();
     }
@@ -245,30 +255,20 @@ void loop(){
 
 
     //state machine
-    if((odrive.GetAxisError(axis_braking)!=0 || odrive.GetAxisError(axis_steering)!=0) && armed&&!emergency){
+    if(odrive_st==error&&!emergency){
       emergency_state();
     }
-    else if(odrive.GetAxisError(axis_braking)==0 && odrive.GetAxisError(axis_steering)==0&&!(deadman==0)){
+    else if(odrive_st==no_error&&!(deadman==0)){
       idle_state(controller_steering);  
     }
-    else if(odrive.GetAxisError(axis_braking)==0 && odrive.GetAxisError(axis_steering)==0&&deadman==0&&armed){
+    else if(odrive_st==no_error&&deadman==0){
       control_state(controller_steering,controller_throttle);
       digitalWrite(RTD_led, HIGH);
     }
     else{
       emergency_state();
     }
-    
 
-    
-
-
-
-
-
-  }
-  else{
-    emergency_state();
   }
 
 
