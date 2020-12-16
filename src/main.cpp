@@ -26,6 +26,12 @@ int axis_steering = 3;
 int axis_braking=5;
 
 
+
+int deadman;
+float controller_steering;
+float controller_throttle;
+int arm_switch;
+
 enum odrive_satus{
   no_error=0,
   startup=1,
@@ -37,9 +43,13 @@ int odrive_st=startup;
 ODriveTeensyCAN odrive;
 
 SimpleTimer check_odrive;
-bool armed=false;
 
+bool armed=false;
+bool deadman_switched=false;
 bool emergency=false;
+
+
+
 void checkOdrive() {
   if(odrive.GetAxisError(axis_braking)!=0 || odrive.GetAxisError(axis_steering)!=0){
     odrive_st = error;
@@ -55,7 +65,7 @@ void setup() {
   pinMode(relay_in, OUTPUT);
   pinMode(button, INPUT);
   pinMode(RTD_led,OUTPUT);
-  pinMode(ODRIVE_status_led,OUTPUT);
+  //pinMode(ODRIVE_status_led,OUTPUT);
   pinMode(deadman_switch_led,OUTPUT);
   
   digitalWrite(relay_in, HIGH);
@@ -101,7 +111,7 @@ void armOdrive() {
     Serial.println("waiting...");
   }
   odrive_st=no_error;
-  digitalWrite(ODRIVE_status_led, HIGH); 
+  analogWrite(ODRIVE_status_led, 4096); 
 }
 void odrive_reset() {
 
@@ -138,7 +148,7 @@ void armOdrivefull() {
     Serial.println("waiting...");
   }
   odrive_st=no_error;
-  digitalWrite(ODRIVE_status_led, HIGH); 
+  analogWrite(ODRIVE_status_led, 4096); 
 }
 
 
@@ -150,18 +160,19 @@ void armOdrivefull() {
 void emergency_state(){
   digitalWrite(relay_in, HIGH);
   digitalWrite(RTD_led, LOW);
+  
   emergency=true;
   
 }
 
-void idle_state(float controller_steering){
+void idle_state(float controller_steering, float ){
   digitalWrite(relay_in, LOW);
-  throttle_control(0);
+  throttle_control(0.0003);
  
   ////if it has, change the position of the odrive
   //Serial.println("steering");
   //Serial.println(controller_steering);
-  //prev=controller_steering;
+  //prev=controller_steering;controller_throttle
   odrive.SetPosition(axis_steering,controller_steering);
   //Serial.println("odrive position");
   
@@ -183,7 +194,7 @@ void control_state(float controller_steering, float controller_throttle){
     brake(controller_throttle);
   }
   else{
-    throttle_control(0);
+    throttle_control(0.0003);
   }
 }
 
@@ -195,7 +206,8 @@ void loop(){
   
 
   //Serial.println(odrive.Heartbeat());
-
+  //Serial.println(odrive_st);
+  
   if(digitalRead(button)){
     armOdrivefull();
   }
@@ -211,11 +223,11 @@ void loop(){
     }
 
 
-
-    int deadman=channels[4];
-    float controller_steering=10*channels[1];
-    float controller_throttle=channels[0];
-    int arm_switch=channels[5];
+    
+    deadman=channels[4];
+    controller_steering=10*channels[1];
+    controller_throttle=channels[0];
+    arm_switch=channels[5];
 
 
 
@@ -235,12 +247,12 @@ void loop(){
     }
     
     if(odrive_st==no_error){
-      digitalWrite(ODRIVE_status_led,LOW);
+      analogWrite(ODRIVE_status_led,4096);
     }
     else{
-      digitalWrite(ODRIVE_status_led,HIGH);
+      analogWrite(ODRIVE_status_led,0);
     }
-
+    
     //Serial.println(odrive.Heartbeat());
     //if(emergency){
       //emergency_state();
@@ -255,14 +267,24 @@ void loop(){
 
 
     //state machine
-    if(odrive_st==error&&!emergency){
+    if((odrive_st==error || emergency) || (deadman_switched && !(deadman==0))){
       emergency_state();
     }
-    else if(odrive_st==no_error&&!(deadman==0)){
-      idle_state(controller_steering);  
+    else if(odrive_st==startup){
+      // Do nothing until startup finishes
+      Serial.println("in startup");
     }
-    else if(odrive_st==no_error&&deadman==0){
+    else if(odrive_st==no_error && !(deadman==0) && !deadman_switched){
+      //Serial.println("in idle state");
+      Serial.println("steering");
+      Serial.println(controller_steering);
+      Serial.println("throttle");
+      Serial.println(controller_throttle);
+      idle_state(controller_steering, controller_throttle);  
+    }
+    else if(odrive_st==no_error && deadman==0){
       control_state(controller_steering,controller_throttle);
+      deadman_switched=true;
       digitalWrite(RTD_led, HIGH);
     }
     else{
