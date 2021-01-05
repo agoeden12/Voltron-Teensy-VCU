@@ -8,19 +8,24 @@
 #define ODRIVE_status_led A21
 #define deadman_switch_led A19
 #define button 26
+
+bool DEBUG = true;
+
 float maxthrottle = 4096;
 float controller_deadband = 0.01;
+
+
 // a SBUS object, which is on hardware
-// serial port 1
+
+// serial port 2
 SBUS x8r(Serial2);
 int relay_in = 23;
 float max_brake = 0.6;
 // channel, fail safe, and lost frames data
 
 //ODRIVE STUFF
-//on the teensy I am using serial port 3
-//on the odrive I am using axis 0
-int prev = 0;
+
+//on the odrive I am using axis 3 and 5
 
 int axis_steering = 3;
 int axis_braking = 5;
@@ -52,6 +57,21 @@ void checkOdrive()
   {
     odrive_st = error;
   }
+
+  if(DEBUG)
+  {
+    Serial.println("testing the check");
+    Serial.println("braking:: Axis error : Encoder error : Motor error");
+    Serial.println(odrive.GetAxisError(axis_braking));
+    Serial.println(odrive.GetEncoderError(axis_braking));
+    Serial.println(odrive.GetMotorError(axis_braking));
+
+    Serial.println("steering:: Axis error : Encoder error : Motor error");
+    Serial.println(odrive.GetAxisError(axis_steering));
+    Serial.println(odrive.GetEncoderError(axis_steering));
+    Serial.println(odrive.GetMotorError(axis_steering));
+  }
+  
 }
 void setup()
 {
@@ -155,7 +175,7 @@ void idle_state(float controller_steering, float)
   ////if it has, change the position of the odrive
   //Serial.println("steering");
   //Serial.println(controller_steering);
-  //prev=controller_steering;controller_throttle
+  
   odrive.SetPosition(axis_steering, controller_steering);
   //Serial.println("odrive position");
 
@@ -185,6 +205,7 @@ void control_state(float controller_steering, float controller_throttle)
 void loop()
 {
 
+  check_odrive.run();
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
 
