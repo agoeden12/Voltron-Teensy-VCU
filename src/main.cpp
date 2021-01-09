@@ -128,10 +128,19 @@ void calibrate_odrive()
   odrive.RunState(axis_steering, requested_state);
   odrive.RunState(axis_braking, requested_state);
   delay(200);
+
+  int timeout_ms = 0;
   while ((odrive.GetCurrentState(axis_braking) != ODriveTeensyCAN::AXIS_STATE_IDLE) && (odrive.GetCurrentState(axis_steering) != ODriveTeensyCAN::AXIS_STATE_IDLE))
   {
     delay(500);
+    timeout_ms += 500;
     Serial.println("waiting...");
+
+    // if (timeout_ms > 2000)
+    // {
+    //   Serial.println("timeout...");
+    //   return;
+    // }
   }
   Serial.println("got out");
 }
@@ -188,6 +197,8 @@ void control_state(float controller_steering, float controller_throttle)
 
   odrive.SetPosition(axis_steering, controller_steering);
 
+  Serial.print("Controller Throttle: ");
+  Serial.println(controller_throttle);
   if ((controller_throttle - controller_deadband) > 0)
   {
     throttle_control(controller_throttle);
