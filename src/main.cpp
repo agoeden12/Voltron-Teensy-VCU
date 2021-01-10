@@ -9,9 +9,9 @@
 #define deadman_switch_led A19
 #define button 26
 
-bool DEBUG = true;
+bool DEBUG = false;
 
-float maxthrottle = 4096;
+float maxthrottle = 2700;
 float controller_deadband = 0.01;
 
 
@@ -20,7 +20,8 @@ float controller_deadband = 0.01;
 // serial port 2
 SBUS x8r(Serial2);
 int relay_in = 23;
-float max_brake = 0.6;
+float max_brake = 0.7;
+float max_steering = 13;
 // channel, fail safe, and lost frames data
 
 //ODRIVE STUFF
@@ -96,7 +97,7 @@ void setup()
 void brake(float b_val)
 {
   float val = max_brake * b_val;
-  odrive.SetTorque(axis_braking, val);
+  odrive.SetTorque(axis_braking, -val);
 }
 void throttle_control(float t_val)
 {
@@ -195,7 +196,7 @@ void control_state(float controller_steering, float controller_throttle)
 {
   digitalWrite(relay_in, LOW);
 
-  odrive.SetPosition(axis_steering, controller_steering);
+  odrive.SetPosition(axis_steering, -controller_steering);
 
   Serial.print("Controller Throttle: ");
   Serial.println(controller_throttle);
@@ -240,7 +241,7 @@ void loop()
     }
 
     deadman = channels[4];
-    controller_steering = 10 * channels[1];
+    controller_steering = max_steering * channels[1];
     controller_throttle = channels[0];
     arm_switch = channels[5];
 
