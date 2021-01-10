@@ -11,10 +11,14 @@
 float maxthrottle=4096;
 float controller_deadband=0.01;
 // a SBUS object, which is on hardware
-// serial port 1
+
+
+// serial port 2
 SBUS x8r(Serial2);
 int relay_in = 23;
 float max_brake = 0.6;
+float max_steering = 13;
+int control_state_=0;
 // channel, fail safe, and lost frames data
 
 //ODRIVE STUFF
@@ -55,8 +59,10 @@ void checkOdrive() {
     odrive_st = error;
   }
 }
-void setup() {
-  // begin the SBUS communication
+void setup()
+{
+  control_state_=1;
+  // this means that the kart is in initialization state
 
   x8r.begin();
   analogWriteResolution(12);
@@ -156,8 +162,9 @@ void armOdrivefull() {
 
 
 
-
-void emergency_state(){
+void emergency_state()
+{
+  control_state_=0;
   digitalWrite(relay_in, HIGH);
   digitalWrite(RTD_led, LOW);
   
@@ -165,7 +172,9 @@ void emergency_state(){
   
 }
 
-void idle_state(float controller_steering, float ){
+void idle_state(float controller_steering, float)
+{
+  control_state_=2;
   digitalWrite(relay_in, LOW);
   throttle_control(0.0003);
  
@@ -181,7 +190,9 @@ void idle_state(float controller_steering, float ){
 
 }
 
-void control_state(float controller_steering, float controller_throttle){
+void control_state(float controller_steering, float controller_throttle)
+{
+  control_state_=3;
   digitalWrite(relay_in, LOW);
   
   odrive.SetPosition(axis_steering,controller_steering);
@@ -207,8 +218,9 @@ void loop(){
 
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
-  
-  if(digitalRead(button)){
+
+  if (digitalRead(button) && control_state_!=3)
+  {
     armOdrivefull();
   }
   
@@ -282,9 +294,12 @@ void loop(){
       Serial.println(controller_throttle);
       idle_state(controller_steering, controller_throttle);  
     }
-    else if(odrive_st==no_error && deadman==0){
-      control_state(controller_steering,controller_throttle);
-      deadman_switched=true;
+    else if (odrive_st == no_error && deadman == 0)
+    {
+      //control_state_=3;
+    // this means that the kart is in control
+      control_state(controller_steering, controller_throttle);
+      deadman_switched = true;
       digitalWrite(RTD_led, HIGH);
     }
     else{
