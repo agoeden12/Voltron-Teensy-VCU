@@ -12,8 +12,10 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "c:/Users/Ian/voltron/teensy-voltron/.pioenvs/teensy35/firmware.elf",
-            "toolchainBinDir": "C:/Users/Ian/AppData/Roaming/SPB_Data/.platformio/packages/toolchain-gccarmnoneeabi/bin",
+            "executable": "/home/benhall/dev/teensy-voltron/.pio/build/teensy35/firmware.elf",
+            "projectEnvName": "teensy35",
+            "toolchainBinDir": "/home/benhall/.platformio/packages/toolchain-gccarmnoneeabi/bin",
+            "svdPath": "/home/benhall/.platformio/platforms/teensy/misc/svd/MK64F12.svd",
             "preLaunchTask": {
                 "type": "PlatformIO",
                 "task": "Pre-Debug"
@@ -24,8 +26,10 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "c:/Users/Ian/voltron/teensy-voltron/.pioenvs/teensy35/firmware.elf",
-            "toolchainBinDir": "C:/Users/Ian/AppData/Roaming/SPB_Data/.platformio/packages/toolchain-gccarmnoneeabi/bin",
+            "executable": "/home/benhall/dev/teensy-voltron/.pio/build/teensy35/firmware.elf",
+            "projectEnvName": "teensy35",
+            "toolchainBinDir": "/home/benhall/.platformio/packages/toolchain-gccarmnoneeabi/bin",
+            "svdPath": "/home/benhall/.platformio/platforms/teensy/misc/svd/MK64F12.svd",
             "internalConsoleOptions": "openOnSessionStart"
         }
     ]
