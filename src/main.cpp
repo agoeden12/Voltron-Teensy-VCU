@@ -2,12 +2,15 @@
 #include "ODriveTeensyCAN.h"
 #include "SBUS.h"
 #include <SimpleTimer.h>
+#include "VoltronSD.h"
 
 #define throttle A22
 #define RTD_led A18
 #define ODRIVE_status_led A21
 #define deadman_switch_led A19
 #define button 26
+
+#
 
 bool DEBUG = false;
 
@@ -25,6 +28,8 @@ float max_brake = 0.6;
 float max_steering = 13;
 int control_state_=0;
 // channel, fail safe, and lost frames data
+
+VoltronSD voltronSD;
 
 //ODRIVE STUFF
 
@@ -54,6 +59,7 @@ bool armed = false;
 bool deadman_switched = false;
 bool emergency = false;
 
+
 void checkOdrive()
 {
   if (odrive.GetAxisError(axis_braking) != 0 || odrive.GetAxisError(axis_steering) != 0)
@@ -80,6 +86,8 @@ void setup()
 {
   control_state_=1;
   // this means that the kart is in initialization state
+
+  voltronSD.InitializeSDcard(10);
 
   x8r.begin();
   analogWriteResolution(12);
