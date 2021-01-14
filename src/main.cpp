@@ -62,6 +62,8 @@ bool emergency = false;
 
 void checkOdrive()
 {
+
+  voltronSD.log_message("--Checking Odrive--");
   if (odrive.GetAxisError(axis_braking) != 0 || odrive.GetAxisError(axis_steering) != 0)
   {
     odrive_st = error;
@@ -87,7 +89,7 @@ void setup()
   control_state_=1;
   // this means that the kart is in initialization state
 
-  voltronSD.InitializeSDcard(10);
+  voltronSD.InitializeSDcard();
 
   x8r.begin();
   analogWriteResolution(12);

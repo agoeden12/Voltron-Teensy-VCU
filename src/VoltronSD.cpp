@@ -3,15 +3,45 @@
 VoltronSD::VoltronSD()
 {
   pinMode(SD_status, OUTPUT);
+
+  filename = "<test_filename>";
+
+  while (SD.exists(filename.c_str())) {
+    filename += "_new";
+  }
+  filename += ".txt";
 }
 
-void VoltronSD::InitializeSDcard(int testseconds)
+void VoltronSD::test_sd_card()
+{
+  InitializeSDcard();
+  
+  if (ReadWriteTest()){
+    Serial.println("OK");
+    digitalWrite(SD_status, HIGH);
+    delay(10 * 1000);
+    digitalWrite(SD_status, LOW);
+  }
+  else
+  {
+    Serial.println("ERROR");
+    for (int i = 1;i <= 10;i++)
+    {
+      digitalWrite(SD_status, HIGH);
+      delay(500);
+      digitalWrite(SD_status, LOW);
+      delay(500);
+    }
+  }
+}
+
+void VoltronSD::InitializeSDcard()
 {
   Serial.print("Initializing SD card...");
 
   if (!SD.begin(BUILTIN_SDCARD)) {
     Serial.println("SD failed");
-    for (int i = 1;i <= testseconds;i++)
+    for (int i = 1;i <= 10;i++)
     {
       digitalWrite(SD_status, HIGH);
       delay(100);
@@ -19,26 +49,18 @@ void VoltronSD::InitializeSDcard(int testseconds)
       delay(900);
     }
     return;
-  }
-  Serial.println("done.");
-
-  if (ReadWriteTest()){
-    Serial.println("OK");
+  } else {
     digitalWrite(SD_status, HIGH);
-    delay(testseconds * 1000);
-    digitalWrite(SD_status, LOW);
   }
-  else
-  {
-    Serial.println("ERROR");
-    for (int i = 1;i <= testseconds;i++)
-    {
-      digitalWrite(SD_status, HIGH);
-      delay(500);
-      digitalWrite(SD_status, LOW);
-      delay(500);
-    }
-  }  
+
+  Serial.println("done.");  
+}
+
+void VoltronSD::log_message(char* msg)
+{
+  log_file = SD.open(filename.c_str(), FILE_WRITE);
+  log_file.println(msg);
+  log_file.close();
 }
 
 void VoltronSD::InfoTest()
