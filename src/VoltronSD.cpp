@@ -1,15 +1,7 @@
 #include "VoltronSD.h"
 
-VoltronSD::VoltronSD()
-{
+VoltronSD::VoltronSD(){
   pinMode(SD_status, OUTPUT);
-
-  filename = "<test_filename>";
-
-  while (SD.exists(filename.c_str())) {
-    filename += "_new";
-  }
-  filename += ".txt";
 }
 
 void VoltronSD::test_sd_card()
@@ -37,10 +29,32 @@ void VoltronSD::test_sd_card()
 
 void VoltronSD::InitializeSDcard()
 {
-  Serial.print("Initializing SD card...");
-
   if (!SD.begin(BUILTIN_SDCARD)) {
-    Serial.println("SD failed");
+    for (int i = 1;i <= 10;i++)
+    {
+      digitalWrite(SD_status, HIGH);
+      delay(400);
+      digitalWrite(SD_status, LOW);
+      delay(600);
+    }
+    return;
+  } else {
+    digitalWrite(SD_status, HIGH);
+  }
+
+  File log_file = SD.open(filename, FILE_WRITE);
+
+  if (log_file) {
+    if(SD.exists(filename)){
+      log_file.println("");
+      log_file.println("");
+    }
+    log_file.println(get_timestamp());
+    log_file.close();
+  } 
+  else 
+  {
+    // Error writing to the file
     for (int i = 1;i <= 10;i++)
     {
       digitalWrite(SD_status, HIGH);
@@ -48,19 +62,45 @@ void VoltronSD::InitializeSDcard()
       digitalWrite(SD_status, LOW);
       delay(900);
     }
-    return;
-  } else {
-    digitalWrite(SD_status, HIGH);
   }
-
-  Serial.println("done.");  
+  digitalWrite(SD_status, LOW);
 }
 
-void VoltronSD::log_message(char* msg)
+void VoltronSD::log_message(String msg)
 {
-  log_file = SD.open(filename.c_str(), FILE_WRITE);
-  log_file.println(msg);
-  log_file.close();
+  digitalWrite(SD_status, HIGH);
+  File log_file = SD.open(filename, FILE_WRITE);
+
+  if (log_file) {
+    log_file.println(msg);
+    log_file.close();
+  } 
+  else 
+  {
+    // Error writing to the file
+    for (int i = 1;i <= 10;i++)
+    {
+      digitalWrite(SD_status, HIGH);
+      delay(100);
+      digitalWrite(SD_status, LOW);
+      delay(900);
+    }
+  }
+  digitalWrite(SD_status, LOW);
+}
+
+String VoltronSD::get_timestamp(){
+  String timestamp = "test ";
+
+  timestamp += (hour() - 5) + ":";
+  timestamp += minute() + ":";
+  timestamp += second();
+  timestamp += " " + month();
+  timestamp += "/" + day();
+  timestamp += "/" + year();
+  timestamp += "----------";
+
+  return timestamp;
 }
 
 void VoltronSD::InfoTest()

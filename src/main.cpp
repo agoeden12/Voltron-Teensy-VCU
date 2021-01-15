@@ -3,14 +3,13 @@
 #include "SBUS.h"
 #include <SimpleTimer.h>
 #include "VoltronSD.h"
+#include <TimeLib.h>
 
 #define throttle A22
 #define RTD_led A18
 #define ODRIVE_status_led A21
 #define deadman_switch_led A19
 #define button 26
-
-#
 
 bool DEBUG = false;
 
@@ -59,10 +58,27 @@ bool armed = false;
 bool deadman_switched = false;
 bool emergency = false;
 
+// unsigned long processSyncMessage() {
+//   unsigned long pctime = 0L;
+//   const unsigned long DEFAULT_TIME = 1357041600; // Jan 1 2013 
+
+//   if(Serial.find("T")) {
+//      pctime = Serial.parseInt();
+//      return pctime;
+//      if( pctime < DEFAULT_TIME) { // check the value is a valid time (greater than Jan 1 2013)
+//        pctime = 0L; // return 0 to indicate that the time is not valid
+//      }
+//   }
+//   return pctime;
+// }
+
+time_t getTeensy3Time()
+{
+  return Teensy3Clock.get();
+}
 
 void checkOdrive()
 {
-
   voltronSD.log_message("--Checking Odrive--");
   if (odrive.GetAxisError(axis_braking) != 0 || odrive.GetAxisError(axis_steering) != 0)
   {
@@ -89,8 +105,6 @@ void setup()
   control_state_=1;
   // this means that the kart is in initialization state
 
-  voltronSD.InitializeSDcard();
-
   x8r.begin();
   analogWriteResolution(12);
   Serial.begin(9600);
@@ -100,6 +114,15 @@ void setup()
   pinMode(RTD_led, OUTPUT);
   //pinMode(ODRIVE_status_led,OUTPUT);
   pinMode(deadman_switch_led, OUTPUT);
+
+  voltronSD.InitializeSDcard();
+  setSyncProvider(getTeensy3Time);
+
+  if (timeStatus()!= timeSet) {
+    Serial3.println("Unable to sync with the RTC");
+  } else {
+    Serial3.println("RTC has set the system time");
+  }
 
   digitalWrite(relay_in, HIGH);
 
@@ -231,6 +254,13 @@ void control_state(float controller_steering, float controller_throttle)
 
 void loop()
 {
+
+  if (Serial.available()) {
+    if (now() != 0) {
+      Teensy3Clock.set(now()); // set the RTC
+      setTime(now());
+    }
+  }
 
   check_odrive.run();
   //Serial.println(odrive.Heartbeat());
