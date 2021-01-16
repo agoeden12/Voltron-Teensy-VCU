@@ -68,6 +68,16 @@ void checkOdrive()
   voltronSD.log_message("--Started Checking Odrive--");
   if (odrive.GetAxisError(axis_braking) != 0 || odrive.GetAxisError(axis_steering) != 0)
   {
+    voltronSD.log_message("Odrive errors: ----------");
+    String msg = "Braking Error: ";
+    msg += odrive.GetAxisError(axis_braking);
+    voltronSD.log_message(msg);
+
+    msg = "Steering Error: ";
+    msg += odrive.GetAxisError(axis_steering);
+    voltronSD.log_message(msg);
+
+    voltronSD.log_message("\n");
     odrive_st = error;
   }
 
@@ -132,7 +142,7 @@ void arm_odrive()
   while ((odrive.GetCurrentState(axis_braking) != ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL) && (odrive.GetCurrentState(axis_steering) != ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL))
   {
     delay(250);
-    voltronSD.log_message("waiting...");
+    voltronSD.log_message("Arm Odrive waiting...");
   }
   odrive_st = no_error;
   analogWrite(ODRIVE_status_led, 4096);
@@ -217,8 +227,9 @@ void control_state(float controller_steering, float controller_throttle)
 
   odrive.SetPosition(axis_steering, -controller_steering);
 
-  Serial.print("Controller Throttle: ");
-  voltronSD.log_message(controller_throttle);
+  String msg = "Controller Throttle: ";
+  msg += controller_throttle;
+  voltronSD.log_message(msg);
   if ((controller_throttle - controller_deadband) > 0)
   {
     throttle_control(controller_throttle);
