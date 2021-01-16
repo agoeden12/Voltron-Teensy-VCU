@@ -16,11 +16,7 @@ bool DEBUG = false;
 float maxthrottle = 2700;
 float controller_deadband = 0.01;
 
-
-// a SBUS object, which is on hardware
-
-
-// serial port 2
+// a SBUS object, which is on hardware serial port 2
 SBUS x8r(Serial2);
 int relay_in = 23;
 float max_brake = 0.6;
@@ -31,9 +27,7 @@ int control_state_=0;
 VoltronSD voltronSD;
 
 //ODRIVE STUFF
-
 //on the odrive I am using axis 3 and 5
-
 int axis_steering = 3;
 int axis_braking = 5;
 
@@ -53,6 +47,7 @@ int odrive_st = startup;
 ODriveTeensyCAN odrive;
 
 SimpleTimer check_odrive;
+SimpleTimer log_data;
 
 bool armed = false;
 bool deadman_switched = false;
@@ -97,6 +92,36 @@ void checkOdrive()
   voltronSD.log_message("--Finished Checking Odrive--");
   
 }
+
+void logData()
+{
+  //VCU State -------
+  String msg = "VCU state: ";
+  switch (control_state_){
+    case 0:
+      msg += "\n\nEmergency State ------------\n";
+      break;
+    case 1:
+      msg += "Initialization";
+      break;
+    case 3:
+      msg += "Driver Control";
+      break;
+  }
+  voltronSD.log_message(msg);
+
+  //Controller Inputs -------
+  msg = "Controller Throttle: ";
+  msg += controller_throttle;
+  msg += controller_throttle < 0 ? " (braking)" : " (accelerating)";
+  voltronSD.log_message(msg);
+
+  msg = "Controller Steering: ";
+  msg += controller_steering;
+  msg += controller_steering < 0 ? " (left)" : " (right)";
+  voltronSD.log_message(msg);
+}
+
 void setup()
 {
   control_state_=1;
@@ -119,8 +144,10 @@ void setup()
 
   //check the odrive for axis errors every 250ms
   check_odrive.setInterval(250, checkOdrive);
+  //log data to the SD card every 125ms
+  log_data.setInterval(125, logData);
 }
-//
+
 void brake(float b_val)
 {
   float val = max_brake * b_val;
@@ -181,7 +208,6 @@ void calibrate_odrive()
 
 void odrive_reset()
 {
-
   odrive.ClearErrors(axis_steering);
   delay(100);
   odrive.ClearErrors(axis_braking);
@@ -212,7 +238,6 @@ void emergency_state()
   digitalWrite(RTD_led, LOW);
 
   emergency = true;
-  voltronSD.log_message("\n\nEmergency State------------------------");
 }
 
 void idle_state(float controller_steering, float)
@@ -236,14 +261,6 @@ void control_state(float controller_steering, float controller_throttle)
   digitalWrite(relay_in, LOW);
 
   odrive.SetPosition(axis_steering, -controller_steering);
-
-  // String msg = "Controller Throttle: ";
-  // msg += controller_throttle;
-  // voltronSD.log_message(msg);
-
-  // msg = "Controller Steering: ";
-  // msg += controller_steering;
-  // voltronSD.log_message(msg);
   
   if ((controller_throttle - controller_deadband) > 0)
   {
