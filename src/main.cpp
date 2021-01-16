@@ -115,15 +115,9 @@ void setup()
   //pinMode(ODRIVE_status_led,OUTPUT);
   pinMode(deadman_switch_led, OUTPUT);
 
-  voltronSD.InitializeSDcard();
   setSyncProvider(getTeensy3Time);
-
-  if (timeStatus()!= timeSet) {
-    Serial3.println("Unable to sync with the RTC");
-  } else {
-    Serial3.println("RTC has set the system time");
-  }
-
+  voltronSD.InitializeSDcard();
+  
   digitalWrite(relay_in, HIGH);
 
   //check the odrive for axis errors every 250ms
@@ -254,13 +248,6 @@ void control_state(float controller_steering, float controller_throttle)
 
 void loop()
 {
-
-  if (Serial.available()) {
-    if (now() != 0) {
-      Teensy3Clock.set(now()); // set the RTC
-      setTime(now());
-    }
-  }
 
   check_odrive.run();
   //Serial.println(odrive.Heartbeat());

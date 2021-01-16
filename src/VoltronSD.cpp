@@ -45,10 +45,9 @@ void VoltronSD::InitializeSDcard()
   File log_file = SD.open(filename, FILE_WRITE);
 
   if (log_file) {
-    if(SD.exists(filename)){
-      log_file.println("");
-      log_file.println("");
-    }
+    log_file.println("");
+    log_file.println("");
+    log_file.print("VCU Started  ");
     log_file.println(get_timestamp());
     log_file.close();
   } 
@@ -90,15 +89,25 @@ void VoltronSD::log_message(String msg)
 }
 
 String VoltronSD::get_timestamp(){
-  String timestamp = "test ";
+  String timestamp = "";
 
-  timestamp += (hour() - 5) + ":";
-  timestamp += minute() + ":";
+  timestamp += hour();
+  
+  if(minute() < 10)
+    timestamp += "0";
+  timestamp +=  ":";
+  timestamp +=  minute();
+  if(second() < 10)
+    timestamp += "0";
+  timestamp += ":";
   timestamp += second();
-  timestamp += " " + month();
-  timestamp += "/" + day();
-  timestamp += "/" + year();
-  timestamp += "----------";
+  timestamp += " ";
+  timestamp += month();
+  timestamp += "/";
+  timestamp += day();
+  timestamp += "/";
+  timestamp += year();
+
 
   return timestamp;
 }
