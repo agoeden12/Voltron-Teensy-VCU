@@ -3,15 +3,16 @@
 String get_short_timestamp(){
   String timestamp = "";
 
+  if(hour() < 10)
+    timestamp += "0";
   timestamp += hour();
-  
+  timestamp += ":";
   if(minute() < 10)
     timestamp += "0";
-  timestamp +=  ":";
-  timestamp +=  minute();
+  timestamp += minute();
+  timestamp += ":";
   if(second() < 10)
     timestamp += "0";
-  timestamp += ":";
   timestamp += second();
 
   return timestamp;
