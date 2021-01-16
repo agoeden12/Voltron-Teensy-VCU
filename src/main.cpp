@@ -21,7 +21,7 @@ SBUS x8r(Serial2);
 int relay_in = 23;
 float max_brake = 0.6;
 float max_steering = 13;
-int control_state_=0;
+int control_state_ = 0;
 // channel, fail safe, and lost frames data
 
 VoltronSD voltronSD;
@@ -76,7 +76,7 @@ void checkOdrive()
     odrive_st = error;
   }
 
-  if(DEBUG)
+  if (DEBUG)
   {
     Serial.println("testing the check");
     Serial.println("braking:: Axis error : Encoder error : Motor error");
@@ -90,23 +90,23 @@ void checkOdrive()
     Serial.println(odrive.GetMotorError(axis_steering));
   }
   voltronSD.log_message("--Finished Checking Odrive--");
-  
 }
 
 void logData()
 {
   //VCU State -------
   String msg = "VCU state: ";
-  switch (control_state_){
-    case 0:
-      msg += "\n\nEmergency State ------------\n";
-      break;
-    case 1:
-      msg += "Initialization";
-      break;
-    case 3:
-      msg += "Driver Control";
-      break;
+  switch (control_state_)
+  {
+  case 0:
+    msg += "\n\nEmergency State ------------\n";
+    break;
+  case 1:
+    msg += "Initialization";
+    break;
+  case 3:
+    msg += "Driver Control";
+    break;
   }
   voltronSD.log_message(msg);
 
@@ -124,7 +124,7 @@ void logData()
 
 void setup()
 {
-  control_state_=1;
+  control_state_ = 1;
   // this means that the kart is in initialization state
 
   x8r.begin();
@@ -233,7 +233,7 @@ void armOdrivefull()
 
 void emergency_state()
 {
-  control_state_=0;
+  control_state_ = 0;
   digitalWrite(relay_in, HIGH);
   digitalWrite(RTD_led, LOW);
 
@@ -241,14 +241,14 @@ void emergency_state()
 }
 
 void idle_state(float controller_steering, float)
-{ 
+{
   digitalWrite(relay_in, LOW);
   throttle_control(0.0003);
 
   ////if it has, change the position of the odrive
   //Serial.println("steering");
   //Serial.println(controller_steering);
-  
+
   odrive.SetPosition(axis_steering, controller_steering);
   //Serial.println("odrive position");
 
@@ -257,11 +257,11 @@ void idle_state(float controller_steering, float)
 
 void control_state(float controller_steering, float controller_throttle)
 {
-  control_state_=3;
+  control_state_ = 3;
   digitalWrite(relay_in, LOW);
 
   odrive.SetPosition(axis_steering, -controller_steering);
-  
+
   if ((controller_throttle - controller_deadband) > 0)
   {
     throttle_control(controller_throttle);
@@ -283,7 +283,7 @@ void loop()
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
 
-  if (digitalRead(button) && control_state_!=3)
+  if (digitalRead(button) && control_state_ != 3)
   {
     armOdrivefull();
   }
@@ -364,7 +364,7 @@ void loop()
     else if (odrive_st == no_error && deadman == 0)
     {
       //control_state_=3;
-    // this means that the kart is in control
+      // this means that the kart is in control
       control_state(controller_steering, controller_throttle);
       deadman_switched = true;
       digitalWrite(RTD_led, HIGH);
