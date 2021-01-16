@@ -83,16 +83,16 @@ void checkOdrive()
 
   if(DEBUG)
   {
-    voltronSD.log_message("testing the check");
-    voltronSD.log_message("braking:: Axis error : Encoder error : Motor error");
-    voltronSD.log_message(odrive.GetAxisError(axis_braking));
-    voltronSD.log_message(odrive.GetEncoderError(axis_braking));
-    voltronSD.log_message(odrive.GetMotorError(axis_braking));
+    Serial.println("testing the check");
+    Serial.println("braking:: Axis error : Encoder error : Motor error");
+    Serial.println(odrive.GetAxisError(axis_braking));
+    Serial.println(odrive.GetEncoderError(axis_braking));
+    Serial.println(odrive.GetMotorError(axis_braking));
 
-    voltronSD.log_message("steering:: Axis error : Encoder error : Motor error");
-    voltronSD.log_message(odrive.GetAxisError(axis_steering));
-    voltronSD.log_message(odrive.GetEncoderError(axis_steering));
-    voltronSD.log_message(odrive.GetMotorError(axis_steering));
+    Serial.println("steering:: Axis error : Encoder error : Motor error");
+    Serial.println(odrive.GetAxisError(axis_steering));
+    Serial.println(odrive.GetEncoderError(axis_steering));
+    Serial.println(odrive.GetMotorError(axis_steering));
   }
   voltronSD.log_message("--Finished Checking Odrive--");
   
@@ -217,7 +217,6 @@ void emergency_state()
 
 void idle_state(float controller_steering, float)
 { 
-  voltronSD.log_message("--Started Idle State--");
   digitalWrite(relay_in, LOW);
   throttle_control(0.0003);
 
@@ -229,26 +228,22 @@ void idle_state(float controller_steering, float)
   //Serial.println("odrive position");
 
   //Serial.println(odrive.GetPosition(axis_id));
-  voltronSD.log_message("--Finished Idle State--");
 }
 
 void control_state(float controller_steering, float controller_throttle)
 {
-  voltronSD.log_message("--Started Control State--");
-
-
   control_state_=3;
   digitalWrite(relay_in, LOW);
 
   odrive.SetPosition(axis_steering, -controller_steering);
 
-  String msg = "Controller Throttle: ";
-  msg += controller_throttle;
-  voltronSD.log_message(msg);
+  // String msg = "Controller Throttle: ";
+  // msg += controller_throttle;
+  // voltronSD.log_message(msg);
 
-  msg = "Controller Steering: ";
-  msg += controller_steering;
-  voltronSD.log_message(msg);
+  // msg = "Controller Steering: ";
+  // msg += controller_steering;
+  // voltronSD.log_message(msg);
   
   if ((controller_throttle - controller_deadband) > 0)
   {
@@ -262,7 +257,6 @@ void control_state(float controller_steering, float controller_throttle)
   {
     throttle_control(0.0003);
   }
-  voltronSD.log_message("--Finished Control State--");
 }
 
 void loop()
@@ -339,15 +333,15 @@ void loop()
     else if (odrive_st == startup)
     {
       // Do nothing until startup finishes
-      voltronSD.log_message("in startup");
+      Serial.println("in startup");
     }
     else if (odrive_st == no_error && !(deadman == 0) && !deadman_switched)
     {
       //Serial.println("in idle state");
-      voltronSD.log_message("steering");
-      voltronSD.log_message(controller_steering);
-      voltronSD.log_message("throttle");
-      voltronSD.log_message(controller_throttle);
+      Serial.println("steering");
+      Serial.println(controller_steering);
+      Serial.println("throttle");
+      Serial.println(controller_throttle);
       idle_state(controller_steering, controller_throttle);
     }
     else if (odrive_st == no_error && deadman == 0)
