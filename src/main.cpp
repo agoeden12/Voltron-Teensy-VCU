@@ -2,6 +2,8 @@
 #include "ODriveTeensyCAN.h"
 #include "SBUS.h"
 #include <SimpleTimer.h>
+#include "VoltronSD.h"
+#include <TimeLib.h>
 
 #define throttle A22
 #define RTD_led A18
@@ -17,12 +19,16 @@ float controller_deadband = 0.01;
 
 // a SBUS object, which is on hardware
 
+
 // serial port 2
 SBUS x8r(Serial2);
 int relay_in = 23;
-float max_brake = 0.7;
+float max_brake = 0.6;
 float max_steering = 13;
+int control_state_=0;
 // channel, fail safe, and lost frames data
+
+VoltronSD voltronSD;
 
 //ODRIVE STUFF
 
@@ -52,31 +58,49 @@ bool armed = false;
 bool deadman_switched = false;
 bool emergency = false;
 
+time_t getTeensy3Time()
+{
+  return Teensy3Clock.get();
+}
+
 void checkOdrive()
 {
+  voltronSD.log_message("--Started Checking Odrive--");
   if (odrive.GetAxisError(axis_braking) != 0 || odrive.GetAxisError(axis_steering) != 0)
   {
+    voltronSD.log_message("Odrive errors: ----------");
+    String msg = "Braking Error: ";
+    msg += odrive.GetAxisError(axis_braking);
+    voltronSD.log_message(msg);
+
+    msg = "Steering Error: ";
+    msg += odrive.GetAxisError(axis_steering);
+    voltronSD.log_message(msg);
+
+    voltronSD.log_message("\n");
     odrive_st = error;
   }
 
   if(DEBUG)
   {
-    Serial.println("testing the check");
-    Serial.println("braking:: Axis error : Encoder error : Motor error");
-    Serial.println(odrive.GetAxisError(axis_braking));
-    Serial.println(odrive.GetEncoderError(axis_braking));
-    Serial.println(odrive.GetMotorError(axis_braking));
+    voltronSD.log_message("testing the check");
+    voltronSD.log_message("braking:: Axis error : Encoder error : Motor error");
+    voltronSD.log_message(odrive.GetAxisError(axis_braking));
+    voltronSD.log_message(odrive.GetEncoderError(axis_braking));
+    voltronSD.log_message(odrive.GetMotorError(axis_braking));
 
-    Serial.println("steering:: Axis error : Encoder error : Motor error");
-    Serial.println(odrive.GetAxisError(axis_steering));
-    Serial.println(odrive.GetEncoderError(axis_steering));
-    Serial.println(odrive.GetMotorError(axis_steering));
+    voltronSD.log_message("steering:: Axis error : Encoder error : Motor error");
+    voltronSD.log_message(odrive.GetAxisError(axis_steering));
+    voltronSD.log_message(odrive.GetEncoderError(axis_steering));
+    voltronSD.log_message(odrive.GetMotorError(axis_steering));
   }
+  voltronSD.log_message("--Finished Checking Odrive--");
   
 }
 void setup()
 {
-  // begin the SBUS communication
+  control_state_=1;
+  // this means that the kart is in initialization state
 
   x8r.begin();
   analogWriteResolution(12);
@@ -87,6 +111,9 @@ void setup()
   pinMode(RTD_led, OUTPUT);
   //pinMode(ODRIVE_status_led,OUTPUT);
   pinMode(deadman_switch_led, OUTPUT);
+
+  setSyncProvider(getTeensy3Time);
+  voltronSD.InitializeSDcard();
 
   digitalWrite(relay_in, HIGH);
 
@@ -108,6 +135,8 @@ void throttle_control(float t_val)
 
 void arm_odrive()
 {
+  voltronSD.log_message("--Started Arming Odrive--");
+
   int requested_state;
   requested_state = ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL;
   odrive.RunState(axis_braking, requested_state);
@@ -115,14 +144,18 @@ void arm_odrive()
   while ((odrive.GetCurrentState(axis_braking) != ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL) && (odrive.GetCurrentState(axis_steering) != ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL))
   {
     delay(250);
-    Serial.println("waiting...");
+    voltronSD.log_message("Arm Odrive waiting...");
   }
   odrive_st = no_error;
   analogWrite(ODRIVE_status_led, 4096);
+
+  voltronSD.log_message("--Finished Arming Odrive--");
 }
 
 void calibrate_odrive()
 {
+  voltronSD.log_message("--Started Calibrating Odrive--");
+
   int requested_state;
 
   requested_state = ODriveTeensyCAN::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
@@ -135,7 +168,7 @@ void calibrate_odrive()
   {
     delay(500);
     timeout_ms += 500;
-    Serial.println("waiting...");
+    voltronSD.log_message("waiting to calibrate Odrive...");
 
     // if (timeout_ms > 2000)
     // {
@@ -143,7 +176,7 @@ void calibrate_odrive()
     //   return;
     // }
   }
-  Serial.println("got out");
+  voltronSD.log_message("--Finished Calibrating Odrive--");
 }
 
 void odrive_reset()
@@ -154,11 +187,13 @@ void odrive_reset()
   odrive.ClearErrors(axis_braking);
   delay(100);
   arm_odrive();
-  Serial.println("resetting odrive");
+  voltronSD.log_message("resetting odrive");
 }
 
 void armOdrivefull()
 {
+  voltronSD.log_message("--Started Full Arming Odrive--");
+
   odrive_reset();
   delay(200);
 
@@ -167,18 +202,22 @@ void armOdrivefull()
 
   // Arming Odrive
   arm_odrive();
+  voltronSD.log_message("--Finished Full Arming Odrive--");
 }
 
 void emergency_state()
 {
+  control_state_=0;
   digitalWrite(relay_in, HIGH);
   digitalWrite(RTD_led, LOW);
 
   emergency = true;
+  voltronSD.log_message("\n\nEmergency State------------------------");
 }
 
 void idle_state(float controller_steering, float)
-{
+{ 
+  voltronSD.log_message("--Started Idle State--");
   digitalWrite(relay_in, LOW);
   throttle_control(0.0003);
 
@@ -190,16 +229,27 @@ void idle_state(float controller_steering, float)
   //Serial.println("odrive position");
 
   //Serial.println(odrive.GetPosition(axis_id));
+  voltronSD.log_message("--Finished Idle State--");
 }
 
 void control_state(float controller_steering, float controller_throttle)
 {
+  voltronSD.log_message("--Started Control State--");
+
+
+  control_state_=3;
   digitalWrite(relay_in, LOW);
 
   odrive.SetPosition(axis_steering, -controller_steering);
 
-  Serial.print("Controller Throttle: ");
-  Serial.println(controller_throttle);
+  String msg = "Controller Throttle: ";
+  msg += controller_throttle;
+  voltronSD.log_message(msg);
+
+  msg = "Controller Steering: ";
+  msg += controller_steering;
+  voltronSD.log_message(msg);
+  
   if ((controller_throttle - controller_deadband) > 0)
   {
     throttle_control(controller_throttle);
@@ -212,6 +262,7 @@ void control_state(float controller_steering, float controller_throttle)
   {
     throttle_control(0.0003);
   }
+  voltronSD.log_message("--Finished Control State--");
 }
 
 void loop()
@@ -221,7 +272,7 @@ void loop()
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
 
-  if (digitalRead(button))
+  if (digitalRead(button) && control_state_!=3)
   {
     armOdrivefull();
   }
@@ -288,19 +339,21 @@ void loop()
     else if (odrive_st == startup)
     {
       // Do nothing until startup finishes
-      Serial.println("in startup");
+      voltronSD.log_message("in startup");
     }
     else if (odrive_st == no_error && !(deadman == 0) && !deadman_switched)
     {
       //Serial.println("in idle state");
-      Serial.println("steering");
-      Serial.println(controller_steering);
-      Serial.println("throttle");
-      Serial.println(controller_throttle);
+      voltronSD.log_message("steering");
+      voltronSD.log_message(controller_steering);
+      voltronSD.log_message("throttle");
+      voltronSD.log_message(controller_throttle);
       idle_state(controller_steering, controller_throttle);
     }
     else if (odrive_st == no_error && deadman == 0)
     {
+      //control_state_=3;
+    // this means that the kart is in control
       control_state(controller_steering, controller_throttle);
       deadman_switched = true;
       digitalWrite(RTD_led, HIGH);
