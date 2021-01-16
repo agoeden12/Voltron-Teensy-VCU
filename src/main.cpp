@@ -135,6 +135,8 @@ void throttle_control(float t_val)
 
 void arm_odrive()
 {
+  voltronSD.log_message("--Started Arming Odrive--");
+
   int requested_state;
   requested_state = ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL;
   odrive.RunState(axis_braking, requested_state);
@@ -146,10 +148,14 @@ void arm_odrive()
   }
   odrive_st = no_error;
   analogWrite(ODRIVE_status_led, 4096);
+
+  voltronSD.log_message("--Finished Arming Odrive--");
 }
 
 void calibrate_odrive()
 {
+  voltronSD.log_message("--Started Calibrating Odrive--");
+
   int requested_state;
 
   requested_state = ODriveTeensyCAN::AXIS_STATE_FULL_CALIBRATION_SEQUENCE;
@@ -162,7 +168,7 @@ void calibrate_odrive()
   {
     delay(500);
     timeout_ms += 500;
-    voltronSD.log_message("waiting...");
+    voltronSD.log_message("waiting to calibrate Odrive...");
 
     // if (timeout_ms > 2000)
     // {
@@ -170,7 +176,7 @@ void calibrate_odrive()
     //   return;
     // }
   }
-  voltronSD.log_message("got out");
+  voltronSD.log_message("--Finished Calibrating Odrive--");
 }
 
 void odrive_reset()
@@ -186,6 +192,8 @@ void odrive_reset()
 
 void armOdrivefull()
 {
+  voltronSD.log_message("--Started Full Arming Odrive--");
+
   odrive_reset();
   delay(200);
 
@@ -194,6 +202,7 @@ void armOdrivefull()
 
   // Arming Odrive
   arm_odrive();
+  voltronSD.log_message("--Finished Full Arming Odrive--");
 }
 
 void emergency_state()
@@ -203,10 +212,12 @@ void emergency_state()
   digitalWrite(RTD_led, LOW);
 
   emergency = true;
+  voltronSD.log_message("\n\nEmergency State------------------------");
 }
 
 void idle_state(float controller_steering, float)
-{
+{ 
+  voltronSD.log_message("--Started Idle State--");
   digitalWrite(relay_in, LOW);
   throttle_control(0.0003);
 
@@ -218,10 +229,14 @@ void idle_state(float controller_steering, float)
   //Serial.println("odrive position");
 
   //Serial.println(odrive.GetPosition(axis_id));
+  voltronSD.log_message("--Finished Idle State--");
 }
 
 void control_state(float controller_steering, float controller_throttle)
 {
+  voltronSD.log_message("--Started Control State--");
+
+
   control_state_=3;
   digitalWrite(relay_in, LOW);
 
@@ -230,6 +245,11 @@ void control_state(float controller_steering, float controller_throttle)
   String msg = "Controller Throttle: ";
   msg += controller_throttle;
   voltronSD.log_message(msg);
+
+  msg = "Controller Steering: ";
+  msg += controller_steering;
+  voltronSD.log_message(msg);
+  
   if ((controller_throttle - controller_deadband) > 0)
   {
     throttle_control(controller_throttle);
@@ -242,6 +262,7 @@ void control_state(float controller_steering, float controller_throttle)
   {
     throttle_control(0.0003);
   }
+  voltronSD.log_message("--Finished Control State--");
 }
 
 void loop()

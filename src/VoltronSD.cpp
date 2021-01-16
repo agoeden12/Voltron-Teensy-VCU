@@ -1,5 +1,22 @@
 #include "VoltronSD.h"
 
+String get_short_timestamp(){
+  String timestamp = "";
+
+  timestamp += hour();
+  
+  if(minute() < 10)
+    timestamp += "0";
+  timestamp +=  ":";
+  timestamp +=  minute();
+  if(second() < 10)
+    timestamp += "0";
+  timestamp += ":";
+  timestamp += second();
+
+  return timestamp;
+}
+
 VoltronSD::VoltronSD(){
   pinMode(SD_status, OUTPUT);
 }
@@ -71,6 +88,8 @@ void VoltronSD::log_message(String msg)
   File log_file = SD.open(filename, FILE_WRITE);
 
   if (log_file) {
+    log_file.print(get_short_timestamp());
+    log_file.print("  ");
     log_file.println(msg);
     log_file.close();
   } 
@@ -89,18 +108,8 @@ void VoltronSD::log_message(String msg)
 }
 
 String VoltronSD::get_timestamp(){
-  String timestamp = "";
+  String timestamp = get_short_timestamp();
 
-  timestamp += hour();
-  
-  if(minute() < 10)
-    timestamp += "0";
-  timestamp +=  ":";
-  timestamp +=  minute();
-  if(second() < 10)
-    timestamp += "0";
-  timestamp += ":";
-  timestamp += second();
   timestamp += " ";
   timestamp += month();
   timestamp += "/";
