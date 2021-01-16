@@ -1,6 +1,6 @@
 #include "VoltronSD.h"
 
-String get_short_timestamp(){
+String VoltronSD::get_short_timestamp(){
   String timestamp = "";
 
   if(hour() < 10)
