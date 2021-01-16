@@ -60,7 +60,7 @@ time_t getTeensy3Time()
 
 void checkOdrive()
 {
-  voltronSD.log_message("--Started Checking Odrive--");
+  // voltronSD.log_message("--Started Checking Odrive--");
   if (odrive.GetAxisError(axis_braking) != 0 || odrive.GetAxisError(axis_steering) != 0)
   {
     voltronSD.log_message("Odrive errors: ----------");
@@ -89,7 +89,7 @@ void checkOdrive()
     Serial.println(odrive.GetEncoderError(axis_steering));
     Serial.println(odrive.GetMotorError(axis_steering));
   }
-  voltronSD.log_message("--Finished Checking Odrive--");
+  // voltronSD.log_message("--Finished Checking Odrive--");
 }
 
 void logData()
@@ -144,8 +144,8 @@ void setup()
 
   //check the odrive for axis errors every 250ms
   check_odrive.setInterval(250, checkOdrive);
-  //log data to the SD card every 125ms
-  log_data.setInterval(125, logData);
+  //log data to the SD card every 250ms
+  log_data.setInterval(250, logData);
 }
 
 void brake(float b_val)
@@ -280,6 +280,7 @@ void loop()
 {
 
   check_odrive.run();
+  log_data.run();
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
 
