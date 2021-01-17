@@ -4,12 +4,15 @@
 #include <SimpleTimer.h>
 #include "VoltronSD.h"
 #include <TimeLib.h>
+#include <Encoder.h>
 
 #define throttle A22
 #define RTD_led A18
 #define ODRIVE_status_led A21
 #define deadman_switch_led A19
 #define button 26
+#define reset_toggle 12
+#define encTicksPerRotation 1042
 
 bool DEBUG = false;
 
@@ -25,6 +28,11 @@ int control_state_ = 0;
 // channel, fail safe, and lost frames data
 
 VoltronSD voltronSD;
+
+//Encoder -> A: 25 | B: 24
+Encoder motorEnc(24,25);
+long motorEncPos = 0;
+float motorRPM = 0;
 
 //ODRIVE STUFF
 //on the odrive I am using axis 3 and 5
@@ -48,6 +56,7 @@ ODriveTeensyCAN odrive;
 
 SimpleTimer check_odrive;
 SimpleTimer log_data;
+SimpleTimer get_rpm;
 
 bool armed = false;
 bool deadman_switched = false;
@@ -95,7 +104,7 @@ void checkOdrive()
 void logData()
 {
   //VCU State -------
-  String msg = "VCU state: ";
+  String msg = "\nVCU state: ";
   switch (control_state_)
   {
   case 0:
@@ -110,6 +119,16 @@ void logData()
   }
   voltronSD.log_message(msg);
 
+  msg = "Deadman Switch Value: ";
+  msg += deadman;
+  msg += " | Boolean: ";
+  msg += deadman_switched;
+  voltronSD.log_message(msg);
+
+  msg = "Motor RPM: ";
+  msg += motorRPM;
+  voltronSD.log_message(msg);
+
   //Controller Inputs -------
   msg = "Controller Throttle: ";
   msg += controller_throttle;
@@ -120,6 +139,11 @@ void logData()
   msg += controller_steering;
   msg += controller_steering < 0 ? " (left)" : " (right)";
   voltronSD.log_message(msg);
+}
+
+void getRPM(){  
+  motorRPM = ( motorEncPos / encTicksPerRotation ) / 3000; // 3000 = (50 * 20ms) * 60s to get rpm
+  motorEnc.write(0); // zero enc position
 }
 
 void setup()
@@ -146,6 +170,7 @@ void setup()
   check_odrive.setInterval(250, checkOdrive);
   //log data to the SD card every 250ms
   log_data.setInterval(250, logData);
+  log_data.setInterval(20, getRPM);
 }
 
 void brake(float b_val)
@@ -281,10 +306,17 @@ void loop()
 
   check_odrive.run();
   log_data.run();
+  get_rpm.run();
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
 
-  if (digitalRead(button) && control_state_ != 3)
+  long currentEncPos = motorEnc.read();
+  if (motorEncPos !=  currentEncPos)
+  {
+    motorEncPos = currentEncPos;
+  }
+
+  if (digitalRead(button) && digitalRead(reset_toggle) && control_state_ != 3)
   {
     armOdrivefull();
   }
@@ -372,7 +404,8 @@ void loop()
     }
     else
     {
-      emergency_state();
+      voltronSD.log_message("\n\nEscaped State Machine\n\n");
+      //emergency_state();
     }
   }
 }
