@@ -12,8 +12,10 @@
 #define deadman_switch_led A19
 #define button 26
 #define reset_toggle 12
-#define encTicksPerRotation 1042
 
+
+
+long encTicksPerRotation = 1042;
 bool DEBUG = false;
 
 float maxthrottle = 2700;
@@ -126,7 +128,9 @@ void logData()
   voltronSD.log_message(msg);
 
   msg = "Motor RPM: ";
-  msg += motorRPM;
+  msg += (float) (( motorEncPos / encTicksPerRotation ) * 3000);
+  msg += " | Motor Pos: ";
+  msg += motorEncPos;
   voltronSD.log_message(msg);
 
   //Controller Inputs -------
@@ -142,7 +146,7 @@ void logData()
 }
 
 void getRPM(){  
-  motorRPM = ( motorEncPos / encTicksPerRotation ) / 3000; // 3000 = (50 * 20ms) * 60s to get rpm
+  motorRPM = ( motorEncPos / encTicksPerRotation ) * 3000; // 3000 = (50 * 20ms) * 60s to get rpm
   motorEnc.write(0); // zero enc position
 }
 
@@ -158,6 +162,7 @@ void setup()
   pinMode(relay_in, OUTPUT);
   pinMode(button, INPUT);
   pinMode(RTD_led, OUTPUT);
+  pinMode(reset_toggle, INPUT);
   //pinMode(ODRIVE_status_led,OUTPUT);
   pinMode(deadman_switch_led, OUTPUT);
 
@@ -170,7 +175,7 @@ void setup()
   check_odrive.setInterval(250, checkOdrive);
   //log data to the SD card every 250ms
   log_data.setInterval(250, logData);
-  log_data.setInterval(20, getRPM);
+  get_rpm.setInterval(20, getRPM);
 }
 
 void brake(float b_val)
@@ -306,7 +311,7 @@ void loop()
 
   check_odrive.run();
   log_data.run();
-  get_rpm.run();
+  // get_rpm.run();
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
 
