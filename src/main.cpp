@@ -10,6 +10,7 @@
 #define ODRIVE_status_led A21
 #define deadman_switch_led A19
 #define button 26
+#define reset_toggle 12
 
 bool DEBUG = false;
 
@@ -95,7 +96,7 @@ void checkOdrive()
 void logData()
 {
   //VCU State -------
-  String msg = "VCU state: ";
+  String msg = "\nVCU state: ";
   switch (control_state_)
   {
   case 0:
@@ -108,6 +109,12 @@ void logData()
     msg += "Driver Control";
     break;
   }
+  voltronSD.log_message(msg);
+
+  msg = "Deadman Switch Value: ";
+  msg += deadman;
+  msg += " | Boolean: ";
+  msg += deadman_switched;
   voltronSD.log_message(msg);
 
   //Controller Inputs -------
@@ -133,6 +140,7 @@ void setup()
   Serial3.begin(115200);
   pinMode(relay_in, OUTPUT);
   pinMode(button, INPUT);
+  pinMode(reset_toggle, INPUT);
   pinMode(RTD_led, OUTPUT);
   //pinMode(ODRIVE_status_led,OUTPUT);
   pinMode(deadman_switch_led, OUTPUT);
@@ -284,7 +292,7 @@ void loop()
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
 
-  if (digitalRead(button) && control_state_ != 3)
+  if (digitalRead(button) && digitalRead(reset_toggle) && control_state_ != 3)
   {
     armOdrivefull();
   }
