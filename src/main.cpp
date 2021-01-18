@@ -11,6 +11,7 @@
 #define deadman_switch_led A19
 #define button 26
 #define reset_toggle 12
+#define encPin 24
 
 bool DEBUG = false;
 
@@ -26,6 +27,10 @@ int control_state_ = 0;
 // channel, fail safe, and lost frames data
 
 VoltronSD voltronSD;
+
+//IR Encoder
+volatile long encTicks = 0;
+volatile float motorRPM = 0;
 
 //ODRIVE STUFF
 //on the odrive I am using axis 3 and 5
@@ -49,6 +54,7 @@ ODriveTeensyCAN odrive;
 
 SimpleTimer check_odrive;
 SimpleTimer log_data;
+SimpleTimer get_rpm;
 
 bool armed = false;
 bool deadman_switched = false;
@@ -117,6 +123,12 @@ void logData()
   msg += deadman_switched;
   voltronSD.log_message(msg);
 
+  msg = "Motor RPM: ";
+  msg += motorRPM;
+  msg += " | Encoder Ticks: ";
+  msg += encTicks;
+  voltronSD.log_message(msg);
+
   //Controller Inputs -------
   msg = "Controller Throttle: ";
   msg += controller_throttle;
@@ -127,6 +139,16 @@ void logData()
   msg += controller_steering;
   msg += controller_steering < 0 ? " (left)" : " (right)";
   voltronSD.log_message(msg);
+}
+
+void getRPM() {
+  motorRPM = ((float)( (float) encTicks / 5.0f )) * (60.0f * 4.0f); // Rpm = ( encTicks / ticksPerRotation) / (secs * (250ms per sec)) to get rpm
+  encTicks = 0;
+}
+
+void countEnc()
+{
+  encTicks++;
 }
 
 void setup()
@@ -145,6 +167,9 @@ void setup()
   //pinMode(ODRIVE_status_led,OUTPUT);
   pinMode(deadman_switch_led, OUTPUT);
 
+  pinMode(encPin, INPUT);  
+  attachInterrupt(digitalPinToInterrupt(encPin), countEnc, RISING);
+
   setSyncProvider(getTeensy3Time);
   voltronSD.InitializeSDcard();
 
@@ -152,6 +177,8 @@ void setup()
 
   //check the odrive for axis errors every 250ms
   check_odrive.setInterval(250, checkOdrive);
+  //get RPM every 250ms
+  get_rpm.setInterval(250, getRPM);
   //log data to the SD card every 250ms
   log_data.setInterval(250, logData);
 }
@@ -286,9 +313,9 @@ void control_state(float controller_steering, float controller_throttle)
 
 void loop()
 {
-
   check_odrive.run();
   log_data.run();
+  get_rpm.run();
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
 
