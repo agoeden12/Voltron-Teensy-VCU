@@ -69,16 +69,16 @@ void checkOdrive()
 {
   if (odrive.GetAxisError(axis_braking) != 0 || odrive.GetAxisError(axis_steering) != 0)
   {
-    // voltronSD.log_message("Odrive errors: ----------");
-    // String msg = "Braking Error: ";
-    // msg += odrive.GetAxisError(axis_braking);
-    // voltronSD.log_message(msg);
+    voltronSD.log_message("Odrive errors: ----------");
+    String msg = "Braking Error: ";
+    msg += odrive.GetAxisError(axis_braking);
+    voltronSD.log_message(msg);
 
-    // msg = "Steering Error: ";
-    // msg += odrive.GetAxisError(axis_steering);
-    // voltronSD.log_message(msg);
+    msg = "Steering Error: ";
+    msg += odrive.GetAxisError(axis_steering);
+    voltronSD.log_message(msg);
 
-    // voltronSD.log_message("\n");
+    voltronSD.log_message("\n");
     odrive_st = error;
   }
 
@@ -135,12 +135,12 @@ void checkOdrive()
 
 void getRPM() {
   motorRPM = ((float)( (float) encTicks / 5.0f )) * (60.0f * 4.0f); // Rpm = ( encTicks / ticksPerRotation) / (secs * (250ms per sec)) to get rpm
-  encTicks = 0;
   String msg = "Motor RPM: ";
   msg += motorRPM;
   msg += " | Encoder Ticks: ";
   msg += encTicks;
   voltronSD.log_message(msg);
+  encTicks = 0;
 }
 
 void countEnc()
