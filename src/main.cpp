@@ -67,83 +67,80 @@ time_t getTeensy3Time()
 
 void checkOdrive()
 {
-  // voltronSD.log_message("--Started Checking Odrive--");
   if (odrive.GetAxisError(axis_braking) != 0 || odrive.GetAxisError(axis_steering) != 0)
   {
-    voltronSD.log_message("Odrive errors: ----------");
-    String msg = "Braking Error: ";
-    msg += odrive.GetAxisError(axis_braking);
-    voltronSD.log_message(msg);
+    // voltronSD.log_message("Odrive errors: ----------");
+    // String msg = "Braking Error: ";
+    // msg += odrive.GetAxisError(axis_braking);
+    // voltronSD.log_message(msg);
 
-    msg = "Steering Error: ";
-    msg += odrive.GetAxisError(axis_steering);
-    voltronSD.log_message(msg);
+    // msg = "Steering Error: ";
+    // msg += odrive.GetAxisError(axis_steering);
+    // voltronSD.log_message(msg);
 
-    voltronSD.log_message("\n");
+    // voltronSD.log_message("\n");
     odrive_st = error;
   }
 
-  if (DEBUG)
-  {
-    Serial.println("testing the check");
-    Serial.println("braking:: Axis error : Encoder error : Motor error");
-    Serial.println(odrive.GetAxisError(axis_braking));
-    Serial.println(odrive.GetEncoderError(axis_braking));
-    Serial.println(odrive.GetMotorError(axis_braking));
+  // if (DEBUG)
+  // {
+    // Serial.println("testing the check");
+    // Serial.println("braking:: Axis error : Encoder error : Motor error");
+    // Serial.println(odrive.GetAxisError(axis_braking));
+    // Serial.println(odrive.GetEncoderError(axis_braking));
+    // Serial.println(odrive.GetMotorError(axis_braking));
 
-    Serial.println("steering:: Axis error : Encoder error : Motor error");
-    Serial.println(odrive.GetAxisError(axis_steering));
-    Serial.println(odrive.GetEncoderError(axis_steering));
-    Serial.println(odrive.GetMotorError(axis_steering));
-  }
-  // voltronSD.log_message("--Finished Checking Odrive--");
+    // Serial.println("steering:: Axis error : Encoder error : Motor error");
+    // Serial.println(odrive.GetAxisError(axis_steering));
+    // Serial.println(odrive.GetEncoderError(axis_steering));
+    // Serial.println(odrive.GetMotorError(axis_steering));
+  // }
 }
 
-void logData()
-{
-  //VCU State -------
-  String msg = "\nVCU state: ";
-  switch (control_state_)
-  {
-  case 0:
-    msg += "\n\nEmergency State ------------\n";
-    break;
-  case 1:
-    msg += "Initialization";
-    break;
-  case 3:
-    msg += "Driver Control";
-    break;
-  }
-  voltronSD.log_message(msg);
+// void logData()
+// {
+//   //VCU State -------
+//   String msg = "\nVCU state: ";
+//   switch (control_state_)
+//   {
+//   case 0:
+//     msg += "\n\nEmergency State ------------\n";
+//     break;
+//   case 1:
+//     msg += "Initialization";
+//     break;
+//   case 3:
+//     msg += "Driver Control";
+//     break;
+//   }
+//   voltronSD.log_message(msg);
 
-  msg = "Deadman Switch Value: ";
-  msg += deadman;
-  msg += " | Boolean: ";
-  msg += deadman_switched;
-  voltronSD.log_message(msg);
+//   msg = "Deadman Switch Value: ";
+//   msg += deadman;
+//   msg += " | Boolean: ";
+//   msg += deadman_switched;
+//   voltronSD.log_message(msg);
 
-  msg = "Motor RPM: ";
-  msg += motorRPM;
-  msg += " | Encoder Ticks: ";
-  msg += encTicks;
-  voltronSD.log_message(msg);
+//   //Controller Inputs -------
+//   msg = "Controller Throttle: ";
+//   msg += controller_throttle;
+//   msg += controller_throttle < 0 ? " (braking)" : " (accelerating)";
+//   voltronSD.log_message(msg);
 
-  //Controller Inputs -------
-  msg = "Controller Throttle: ";
-  msg += controller_throttle;
-  msg += controller_throttle < 0 ? " (braking)" : " (accelerating)";
-  voltronSD.log_message(msg);
-
-  msg = "Controller Steering: ";
-  msg += controller_steering;
-  msg += controller_steering < 0 ? " (left)" : " (right)";
-  voltronSD.log_message(msg);
-}
+//   msg = "Controller Steering: ";
+//   msg += controller_steering;
+//   msg += controller_steering < 0 ? " (left)" : " (right)";
+//   voltronSD.log_message(msg);
+// }
 
 void getRPM() {
   motorRPM = ((float)( (float) encTicks / 5.0f )) * (60.0f * 4.0f); // Rpm = ( encTicks / ticksPerRotation) / (secs * (250ms per sec)) to get rpm
   encTicks = 0;
+  String msg = "Motor RPM: ";
+  msg += motorRPM;
+  msg += " | Encoder Ticks: ";
+  msg += encTicks;
+  voltronSD.log_message(msg);
 }
 
 void countEnc()
@@ -180,7 +177,7 @@ void setup()
   //get RPM every 250ms
   get_rpm.setInterval(250, getRPM);
   //log data to the SD card every 250ms
-  log_data.setInterval(250, logData);
+  // log_data.setInterval(250, logData);
 }
 
 void brake(float b_val)
@@ -197,7 +194,7 @@ void throttle_control(float t_val)
 
 void arm_odrive()
 {
-  voltronSD.log_message("--Started Arming Odrive--");
+  // voltronSD.log_message("--Started Arming Odrive--");
 
   int requested_state;
   requested_state = ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL;
@@ -206,17 +203,17 @@ void arm_odrive()
   while ((odrive.GetCurrentState(axis_braking) != ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL) && (odrive.GetCurrentState(axis_steering) != ODriveTeensyCAN::AXIS_STATE_CLOSED_LOOP_CONTROL))
   {
     delay(250);
-    voltronSD.log_message("Arm Odrive waiting...");
+    // voltronSD.log_message("Arm Odrive waiting...");
   }
   odrive_st = no_error;
   analogWrite(ODRIVE_status_led, 4096);
 
-  voltronSD.log_message("--Finished Arming Odrive--");
+  // voltronSD.log_message("--Finished Arming Odrive--");
 }
 
 void calibrate_odrive()
 {
-  voltronSD.log_message("--Started Calibrating Odrive--");
+  // voltronSD.log_message("--Started Calibrating Odrive--");
 
   int requested_state;
 
@@ -230,7 +227,7 @@ void calibrate_odrive()
   {
     delay(500);
     timeout_ms += 500;
-    voltronSD.log_message("waiting to calibrate Odrive...");
+    // voltronSD.log_message("waiting to calibrate Odrive...");
 
     // if (timeout_ms > 2000)
     // {
@@ -238,7 +235,7 @@ void calibrate_odrive()
     //   return;
     // }
   }
-  voltronSD.log_message("--Finished Calibrating Odrive--");
+  // voltronSD.log_message("--Finished Calibrating Odrive--");
 }
 
 void odrive_reset()
@@ -248,12 +245,12 @@ void odrive_reset()
   odrive.ClearErrors(axis_braking);
   delay(100);
   arm_odrive();
-  voltronSD.log_message("resetting odrive");
+  // voltronSD.log_message("resetting odrive");
 }
 
 void armOdrivefull()
 {
-  voltronSD.log_message("--Started Full Arming Odrive--");
+  // voltronSD.log_message("--Started Full Arming Odrive--");
 
   odrive_reset();
   delay(200);
@@ -263,7 +260,7 @@ void armOdrivefull()
 
   // Arming Odrive
   arm_odrive();
-  voltronSD.log_message("--Finished Full Arming Odrive--");
+  // voltronSD.log_message("--Finished Full Arming Odrive--");
 }
 
 void emergency_state()
@@ -314,8 +311,8 @@ void control_state(float controller_steering, float controller_throttle)
 void loop()
 {
   check_odrive.run();
-  log_data.run();
   get_rpm.run();
+  // log_data.run();
   //Serial.println(odrive.Heartbeat());
   //Serial.println(odrive_st);
 
