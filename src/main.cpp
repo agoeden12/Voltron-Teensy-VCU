@@ -161,7 +161,6 @@ void brake(float b_val)
 }
 void throttle_control(float t_val)
 {
-
   int controller_throttle = maxthrottle * t_val;
   analogWrite(throttle, (int)controller_throttle);
 }
@@ -270,14 +269,17 @@ void control_state(float controller_steering, float controller_throttle)
 
   if ((controller_throttle - controller_deadband) > 0)
   {
+    brake(0);
     throttle_control(controller_throttle);
   }
   else if (controller_throttle < 0)
   {
+    throttle_control(0.0003);
     brake(controller_throttle);
   }
   else
   {
+    brake(0);
     throttle_control(0.0003);
   }
 }
